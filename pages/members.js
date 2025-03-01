@@ -10,9 +10,12 @@ import {
   DrawerHeader,
   DrawerRoot,
   DrawerTitle,
-  DrawerTrigger, Button, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, StackSeparator
+  DrawerTrigger, Button, CheckboxGroup, Group, NativeSelect, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, StackSeparator,
+  Flex, InputAddon, HStack, FormatNumber, Badge,
+  Heading
 } from '@chakra-ui/react';
 import { Field } from '../components/ui/field';
+import { CheckboxCard } from "@/components/ui/checkbox-card"
 import { motion, AnimatePresence } from 'framer-motion'; // Importing framer-motion for animations
 import BottomNavigationBar from '../components/BottomNavigationBar';
 import FloatingActionButton from '../components/FloatingActionButton';
@@ -21,6 +24,10 @@ import ResetActionButton from '../components/ResetActionButton';
 import StatCard from '../components/StatCard'; // Import the StatCard component
 
 import { Drawer, SwipeableDrawer, Typography } from '@mui/material';
+import PeopleIcon from '@mui/icons-material/People'; // For Members
+import FitnessCenterIcon from '@mui/icons-material/FitnessCenter'; 
+import SportsGymnasticsIcon from '@mui/icons-material/SportsGymnastics'; 
+import SportsKabaddiIcon from '@mui/icons-material/SportsKabaddi'; 
 
 
 
@@ -60,11 +67,15 @@ export default function Members() {
   const [items, setItems] = useState([]);
   const [memberNo, setMemberNo] = useState(0); // Track the member number
 
-  const [speechTranscript, setSpeechTranscript] = useState(''); // To store the transcript
-  const [isListening, setIsListening] = useState(false); // To track the listening state
+  const [selectedTraining, setSelectedTraining] = useState([]);
+  const [selectedPackage, setSelectedPackage] = useState(1);
+  const [totalFees, setTotalFees] = useState(0);
 
-  // Initialize SpeechRecognition
-  const recognition = useRef(null);
+  const [startDate, setStartDate] = useState(new Date());  // Start date is today
+  const [endDate, setEndDate] = useState(null);  // This will hold the calculated end date
+
+
+
 
   useEffect(() => {
 
@@ -299,83 +310,64 @@ export default function Members() {
     fetchData(); // Fetch data based on today's date
   };
 
-  useEffect(() => {
-    // Initialize SpeechRecognition on component mount
-    if (window.SpeechRecognition || window.webkitSpeechRecognition) {
-      recognition.current = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-      recognition.current.lang = 'en-US'; // Set the language
-      recognition.current.interimResults = true; // Get real-time results
-      recognition.current.maxAlternatives = 1; // Get only the best result
-
-      recognition.current.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        console.log('Transcript:', transcript); // Log the transcript to the console
-        setSpeechTranscript(transcript); // Update the speech transcript in the state
-        setName(transcript); // Set the transcript as the name input value
-      };
-
-      recognition.current.onend = () => {
-        setIsListening(false); // Set listening state to false when recognition ends
-        console.log('Speech recognition stopped');
-      };
-
-      recognition.current.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-      };
-    } else {
-      console.log('SpeechRecognition is not supported in this browser.');
-    }
-
-    // Cleanup on component unmount
-    return () => {
-      if (recognition.current) {
-        recognition.current.onresult = null;
-        recognition.current.onend = null;
-        recognition.current.onerror = null;
+  const handleTrainingChange = (event) => {
+    const { value, checked } = event.target;
+  
+    setSelectedTraining((prev) => {
+      if (checked) {
+        // If the checkbox is checked, add it to the list
+        return [...prev, value];
+      } else {
+        // If the checkbox is unchecked, remove it from the list
+        return prev.filter((item) => item !== value);
       }
-    };
-  }, []);
-
-  const handleStartListening = () => {
-    if (recognition.current) {
-      recognition.current.start();
-      setIsListening(true); // Set listening state to true
-      console.log('Speech recognition started');
-    }
+    });
   };
 
-  const handleStopListening = () => {
-    if (recognition.current) {
-      recognition.current.stop(); // Stop the recognition
-      setIsListening(false); // Set listening state to false
-      console.log('Speech recognition stopped');
-    }
+  const handlePackageChange = (event) => {
+    const selectedPackageValue = event.target.value;
+    setSelectedPackage(selectedPackageValue);
+    
+    // Calculate the number of days to add (30 days per month)
+    const daysToAdd = selectedPackageValue * 30;
+  
+    // Create a new Date object for the end date by adding the number of days
+    const newEndDate = new Date(startDate); // Start with today's date (start date)
+    newEndDate.setDate(newEndDate.getDate() + daysToAdd);
+  
+    // Set the end date
+    setEndDate(newEndDate);
+   
   };
+  
+  useEffect(() => {
+    // Set default end date to 1 month (30 days) from start date when the page loads
+    const defaultEndDate = new Date(startDate);  // Start with the current start date
+    defaultEndDate.setDate(defaultEndDate.getDate() + 30);  // Add 30 days (1 month)
+  
+    setEndDate(defaultEndDate);  // Set the end date to default
+  }, [startDate]);  // This effect runs only once on component mount or when startDate changes
+  
+  
+// Format dates (e.g., Feb 22, 2025)
+const formatDate2 = (date) => {
+  const options = { month: 'short', day: 'numeric', year: 'numeric' };
+  return date.toLocaleDateString('en-US', options);
+};
+  useEffect(() => {
+    // Calculate total based on selected training and package
+    const trainingTotal = selectedTraining.reduce((sum, type) => sum + trainingFees[type], 0);
+    const packageMultiplier = selectedPackage || 1;
+    setTotalFees(trainingTotal * packageMultiplier);
+  }, [selectedTraining, selectedPackage]);
 
 
 
   return (
     <>
       <div>
-        <Box {...handlers} p={6} bg="bg.surface" cursor="grab" overflow="hidden" >
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={formattedDate}
-              initial={{ opacity: 0, x: swipeDirection }} // Use swipeDirection here
-              animate={{ opacity: 1, x: 0 }}  // Animate to the center
-              exit={{ opacity: 0, x: -swipeDirection }} // Exit in the same direction
-              transition={{
-                duration: 0.0, // Short transition time
-                ease: "easeInOut", // This removes the springiness
-              }}
-            >
-
-              <Stat.Root>
-                <Stat.Label>Selected Date</Stat.Label>
-                <Stat.ValueText>{formattedDate}</Stat.ValueText>
-              </Stat.Root>
-            </motion.div>
-          </AnimatePresence>
+        <Box  p={6} >
+          <Heading>Total Members: 20</Heading>
         </Box>
         <FloatingActionButton onClick={handleSearchClick} />
       </div>
@@ -397,7 +389,7 @@ export default function Members() {
             {items.map((item) => (
               <Table.Row key={item.id}>
                 <Table.Cell textAlign="center">{item.memberNo}</Table.Cell>
-                <Table.Cell>{item.name}</Table.Cell>   
+                <Table.Cell>{item.name}</Table.Cell>
                 <Table.Cell>{item.phone}</Table.Cell>
                 <Table.Cell>{item.feesDue}</Table.Cell>
                 <Table.Cell>{item.attendance}</Table.Cell>
@@ -422,54 +414,115 @@ export default function Members() {
           <Stack gap={5} p={6}>
             {/* Member No */}
             <Box>
-              <Text fontSize="sm">Member No</Text>
+              <Text fontSize="sm">Member ID</Text>
               <Text fontSize="3xl" fontWeight="bold">{memberNo}</Text>
             </Box>
 
             {/* Name Field */}
             <Field label="Name" required>
+            <Group attached width="100%">
+            <InputAddon><PeopleIcon/></InputAddon>
               <Input
                 ref={nameInputRef}
-                variant="subtle"
-                size="lg"
+                variant="outline"
+                size="xl"
                 placeholder="Enter Name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
+              </Group>
             </Field>
 
             {/* Phone Field */}
             <Field label="Phone" required>
+            <Group attached width="100%">
+            <InputAddon>+91</InputAddon>
               <Input
-                variant="subtle"
-                size="lg"
+                variant="outline"
+                size="xl"
                 placeholder="Enter Phone"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)} // Add state for phone
+                type="tel"
               />
+              </Group>
             </Field>
 
-            {/* Fees Due Field */}
-            <Field label="Fees Due" required>
-              <Input
-                variant="subtle"
-                size="lg"
-                placeholder="Enter Fees Due"
-                value={feesDue}
-                onChange={(e) => setFeesDue(e.target.value)} // Add state for feesDue
-              />
-            </Field>
+            {/* Type  Field */}
+            
+              <CheckboxGroup width="100%" required onChange={handleTrainingChange}>
+              <Box pb={2} pt={2} overflowX="auto"> {/* This enables horizontal scrolling */}
+                <Flex gap={3} justify="space-between" direction="row">
+                  <CheckboxCard
+
+                    label="Weight"
+                    value="weight"
+                    size="md"
+                    colorPalette="teal"
+                    variant="surface"
+                    icon={<FitnessCenterIcon />}
+                  />
+                  <CheckboxCard
+
+                    label="Cardio"
+                    value="cardio"
+                    size="md"
+                    colorPalette="teal"
+                    variant="surface"
+                    icon={<SportsGymnasticsIcon />}
+                  />
+                  <CheckboxCard
+
+                    label="Personal"
+                    value="personal"
+                    size="md"
+                    colorPalette="teal"
+                    variant="surface"
+                    icon={<SportsKabaddiIcon />}
+                  />
+                </Flex>
+                </Box>
+              </CheckboxGroup>
+      
 
             {/* Attendance Field */}
-            <Field label="Attendance" required>
-              <Input
-                variant="subtle"
-                size="lg"
-                placeholder="Enter Attendance"
-                value={attendance}
-                onChange={(e) => setAttendance(e.target.value)} // Add state for attendance
-              />
+            <Field label="Period" required>
+              <NativeSelect.Root size="xl" variant="outline">
+                <NativeSelect.Field  onChange={handlePackageChange} value={selectedPackage}>
+                  <option value={1}>1 Month</option>
+                  <option value={3}>3 Month</option>
+                  <option value={6}>6 Month</option>
+                  <option value={12}>12 Month</option>
+                </NativeSelect.Field>
+                <NativeSelect.Indicator />
+              </NativeSelect.Root>
             </Field>
+
+            <Separator />
+
+            <Stat.Root>
+          <Stat.Label>Total Fees</Stat.Label>
+          <HStack>
+            <Stat.ValueText>
+              {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(totalFees)}
+            </Stat.ValueText>
+            <Badge colorPalette="green">- ₹1200 Saving</Badge>
+          </HStack>
+          <Stat.HelpText>
+            {selectedTraining.join(', ')} x {packageFees[selectedPackage]} Months
+          </Stat.HelpText>
+        </Stat.Root>
+
+        <Separator />
+
+        <Box>
+        <Text fontSize="xs">Start Date - End Date</Text>
+        <Text fontSize="lg" fontWeight="medium">
+          {formatDate2(startDate)} - {endDate ? formatDate2(endDate) : ''}
+        </Text>
+      </Box>
+
+        
 
             <Separator />
 
@@ -488,7 +541,7 @@ export default function Members() {
 
       {/* Fixed Search Bar */}
       {search && (
-        <div style={{ position: 'fixed', top: 0, width: '100%', padding: '30px 16px', backgroundColor: 'white', zIndex: 2000 }}>
+        <div style={{ position: 'fixed', top: 0, width: '100%', padding: '18px 16px', backgroundColor: 'white', zIndex: 2000 }}>
 
           <Stack direction="row" spacing={4}>
             <Input
@@ -552,3 +605,15 @@ export default function Members() {
 }
 
 
+const trainingFees = {
+  weight: 500,
+  cardio: 300,
+  personal: 2000,
+};
+
+const packageFees = {
+  '1_month': 1,
+  '3_months': 3,
+  '6_months': 6,
+  '12_months': 12,
+};

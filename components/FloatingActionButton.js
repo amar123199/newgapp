@@ -12,7 +12,7 @@ const FloatingActionButton = ({onClick}) => {
       onClick={onClick}
       sx={{
         position: 'fixed',
-        top: 30, // Distance from the bottom of the screen
+        top: 16, // Distance from the bottom of the screen
         right: 20,  // Distance from the right of the screen
         zIndex: 1000, // Make sure it's above other elements
         backgroundColor: '#f9f9f9', // Off-white background color
