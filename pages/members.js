@@ -86,14 +86,24 @@ export default function Members() {
   const fetchData = async () => {
     const querySnapshot = await getDocs(collection(db, "members")); // Firestore collection name
     const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // For each member, fetch the end date from their membership subcollection
+  const membersWithEndDate = await Promise.all(data.map(async (member) => {
+    const membershipSnapshot = await getDocs(collection(db, "members", member.id, "membership"));
+    const membershipData = membershipSnapshot.docs.map(doc => doc.data());
+
+    const endDate = membershipData.length > 0 ? membershipData[0].endDate.toDate() : null; // Assuming there is at least one membership
+    return { ...member, endDate }; // Add endDate to the member object
+  }));
+
     // Filter data to only include entries created on the selected date (currentDate)
-    const filteredData = data.filter(item => isCreatedOnDate(item.createdAt, currentDate));
+  const filteredData = membersWithEndDate.filter(item => isCreatedOnDate(item.createdAt, currentDate));
 
     // Sort the filtered data by memberNo in ascending order
     const sortedData = filteredData.sort((a, b) => b.memberNo - a.memberNo);
 
     setItems(sortedData);
-
+     console.log(sortedData)
     // Set the member number to be the next available number (i.e., current member count + 1)
     setMemberNo(filteredData.length + 1);
   };
@@ -179,8 +189,20 @@ export default function Members() {
   };
 
   const toggleDrawer = () => {
-    setOpen(false);
-    setSearch(false);
+   // Reset form states to their initial values
+  setName('');
+  setPhone('');
+  setFeesDue('');
+  setAttendance('');
+  setJoinedDate(new Date());  // or set it to null if needed
+  setSelectedTraining([]);
+  setSelectedPackage(1);  // Default to the first package
+  setStartDate(new Date());  // Default to today
+  setEndDate(null);  // Set the end date to null initially
+  setSearchName(''); // Clear the search input
+  setOpen(false); // Close the drawer
+  setSearch(false); // Close the search input
+
   };
 
   const toggleSearchDrawer = () => {
@@ -195,9 +217,9 @@ export default function Members() {
     // Capitalize the first letter of the name
     const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1);
 
-    console.log({ capitalizedName, phone, feesDue, attendance });
+    console.log({ capitalizedName, phone });
 
-    if (!capitalizedName || !phone || !feesDue || !attendance) {
+    if (!capitalizedName || !phone || selectedTraining.length === 0) {
       alert("Please fill all fields before saving.");
       return;
     }
@@ -206,14 +228,35 @@ export default function Members() {
       const docRef = await addDoc(collection(db, "members"), {
         name: capitalizedName,
         phone,
-        feesDue,
-        attendance,
-        joinedAt: joinedDate, // Save the joined date
         createdAt: new Date(), // Timestamp
+        status: "active",  // Default status is "active"
         memberNo: memberNo,  // Assign the member number
       });
 
       console.log("Document written with ID: ", docRef.id);
+
+      // Create a membership subcollection for the member
+      const membershipRef = await addDoc(collection(db, "members", docRef.id, "membership"), {
+        trainingType: selectedTraining,
+        package: selectedPackage,
+        startDate: startDate,
+        endDate: endDate,
+        fees: totalFees,
+    });
+
+    console.log("Membership details added with ID: ", membershipRef.id);
+
+    // Create a global membership record in the 'memberships' collection
+   const globalmembership = await addDoc(collection(db, "memberships"), {
+      memberID: docRef.id,
+      trainingType: selectedTraining,
+      package: selectedPackage,
+      startDate: startDate,
+      endDate: endDate,
+      fees: totalFees,
+  });
+
+  console.log("global membership details added with ID: ", globalmembership.id);
 
       // Update local state to reflect new member, converting the createdAt to a valid Date object
       const newMember = {
@@ -359,15 +402,58 @@ const formatDate2 = (date) => {
     const trainingTotal = selectedTraining.reduce((sum, type) => sum + trainingFees[type], 0);
     const packageMultiplier = selectedPackage || 1;
     setTotalFees(trainingTotal * packageMultiplier);
+    console.log(selectedTraining)
   }, [selectedTraining, selectedPackage]);
 
+  // Utility function to determine badge color based on endDate
+const getBadgeColorByDateDifference = (endDate) => {
+  if (!endDate) {
+    console.error("Invalid endDate.");
+    return "gray"; // Return default gray color if endDate is invalid
+  }
 
+  // Convert endDate string to Date object
+  const endDateObj = new Date(endDate);
+
+  // Check if endDateObj is a valid Date
+  if (isNaN(endDateObj.getTime())) {
+    console.error("Invalid endDate object:", endDateObj);
+    return "gray"; // Return default gray color if endDate conversion failed
+  }
+
+  // Get current date
+  const currentDate = new Date();
+
+  // Calculate the difference in milliseconds
+  const diffTime = endDateObj - currentDate;
+
+  // If the diffTime is negative, it means the endDate is in the past, handle this case
+  if (diffTime < 0) {
+    console.log("The end date has already passed.");
+    return "gray"; // Return gray if the endDate is in the past
+  }
+
+  // Convert milliseconds to days and round it to the nearest whole number
+  const diffDays = Math.ceil(diffTime / (1000 * 3600 * 24)); // This rounds up to the nearest integer
+  
+  console.log(diffDays + " days difference");
+
+  // Return color and display text based on the difference
+  if (diffDays <= 3) {
+    return { color: "red", displayText: `${diffDays} days` }; // Less than or equal to 3 days
+  } else if (diffDays <= 7) {
+    return { color: "yellow", displayText: `${diffDays} days` }; // Less than or equal to 7 days
+  } else {
+    return { color: "gray", displayText: formatDate2(endDate) }; // Display the actual date if more than 7 days
+  }
+};
+  
 
   return (
     <>
       <div>
         <Box  p={6} >
-          <Heading>Total Members: 20</Heading>
+          <Heading>Total Members: {memberNo-1}</Heading>
         </Box>
         <FloatingActionButton onClick={handleSearchClick} />
       </div>
@@ -379,24 +465,39 @@ const formatDate2 = (date) => {
               <Table.ColumnHeader textAlign="center">M. ID</Table.ColumnHeader>
               <Table.ColumnHeader>Name</Table.ColumnHeader>
               <Table.ColumnHeader>Phone</Table.ColumnHeader>
-              <Table.ColumnHeader>Fees Due</Table.ColumnHeader>
-              <Table.ColumnHeader>Attendance</Table.ColumnHeader>
+              <Table.ColumnHeader>M. End Date</Table.ColumnHeader>
+           
               <Table.ColumnHeader textAlign="end">Joined</Table.ColumnHeader>
             </Table.Row>
           </Table.Header>
 
           <Table.Body>
-            {items.map((item) => (
-              <Table.Row key={item.id}>
-                <Table.Cell textAlign="center">{item.memberNo}</Table.Cell>
-                <Table.Cell>{item.name}</Table.Cell>
-                <Table.Cell>{item.phone}</Table.Cell>
-                <Table.Cell>{item.feesDue}</Table.Cell>
-                <Table.Cell>{item.attendance}</Table.Cell>
-                <Table.Cell textAlign="end">5j</Table.Cell>
-              </Table.Row>
-            ))}
-          </Table.Body>
+  {items.map((item) => {
+   // Get the badge color and display text based on the endDate
+   const { color: badgeColor, displayText } = getBadgeColorByDateDifference(item.endDate);
+
+   // Format the createdAt Firestore timestamp into the desired format
+   const formattedDate = new Date(item.createdAt.seconds * 1000).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short", // "Apr"
+    day: "numeric", // "1"
+  });
+
+    return (
+      <Table.Row key={item.id}>
+        <Table.Cell textAlign="center">{item.memberNo}</Table.Cell>
+        <Table.Cell>{item.name}</Table.Cell>
+        <Table.Cell>{item.phone}</Table.Cell>
+        <Table.Cell>
+        <Badge size="md" colorPalette={badgeColor}>
+                    {displayText}
+                  </Badge>
+        </Table.Cell>
+        <Table.Cell textAlign="end">{formattedDate}</Table.Cell>
+      </Table.Row>
+    );
+  })}
+</Table.Body>
         </Table.Root>
       </Table.ScrollArea>
 

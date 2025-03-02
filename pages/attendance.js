@@ -29,7 +29,7 @@ import { Swiper, SwiperSlide } from 'swiper/react';
 // Import Swiper styles
 import 'swiper/css';
 
-import { collection, getDocs, addDoc, query, where, orderBy } from 'firebase/firestore';
+import { collection, getDocs, addDoc, query, where, orderBy,doc,setDoc,getDoc,updateDoc, } from 'firebase/firestore';
 import { db } from '../firebaseConfig'; // Import Firestore config
 
 
@@ -70,7 +70,7 @@ export default function Attendance() {
   }, [currentDate]);
 
   const fetchData = async () => {
-    const querySnapshot = await getDocs(collection(db, "patients")); // Firestore collection name
+    const querySnapshot = await getDocs(collection(db, "members")); // Firestore collection name
     const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     // Filter data to only include entries created on the selected date (currentDate)
     const filteredData = data.filter(item => isCreatedOnDate(item.createdAt, currentDate));
@@ -343,6 +343,68 @@ export default function Attendance() {
     }
   };
 
+  const handleAttendanceClick = async (memberId) => {
+    const currentTimestamp = new Date();
+    const dateString = currentTimestamp.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+  
+    try {
+      // 1. Update member's attendance in their subcollection
+      const memberAttendanceRef = doc(db, "members", memberId, "attendance", dateString);
+      const memberDoc = await getDoc(memberAttendanceRef);
+      
+      let newStatus;
+      
+      if (memberDoc.exists()) {
+        // If attendance already exists, toggle it between 'present' and 'absent'
+        const currentStatus = memberDoc.data().status;
+        newStatus = currentStatus === 'present' ? 'absent' : 'present';
+        
+        await updateDoc(memberAttendanceRef, {
+          status: newStatus,
+          date: currentTimestamp
+        });
+      } else {
+        // If attendance doesn't exist, set it as present
+        newStatus = 'present';
+        await setDoc(memberAttendanceRef, {
+          status: newStatus,
+          date: currentTimestamp
+        });
+      }
+  
+      // 2. Update global attendance collection
+      const globalAttendanceRef = doc(db, "attendances", `${memberId}_${dateString}`);
+      const globalAttendanceDoc = await getDoc(globalAttendanceRef);
+  
+      if (globalAttendanceDoc.exists()) {
+        // If global attendance exists, update the member's attendance
+        const currentGlobalStatus = globalAttendanceDoc.data().status;
+        newStatus = currentGlobalStatus === 'present' ? 'absent' : 'present';
+        
+        await updateDoc(globalAttendanceRef, {
+          memberId: memberId,
+          date: currentTimestamp,
+          status: newStatus
+        });
+      } else {
+        // If global attendance doesn't exist, create it with this member's status
+        newStatus = 'present'; // Set the member as present initially
+        await setDoc(globalAttendanceRef, {
+          memberId: memberId,
+          date: currentTimestamp,
+          status: newStatus
+        });
+      }
+  
+      // Optionally, update local state if you have a local array of members
+      setItems(prevItems => prevItems.map(item => 
+        item.id === memberId ? { ...item, status: newStatus } : item
+      ));
+  
+    } catch (error) {
+      console.error("Error updating attendance: ", error);
+    }
+  };
 
 
   return (
@@ -377,49 +439,27 @@ export default function Attendance() {
             <Table.Row bg="bg.subtle">
               <Table.ColumnHeader textAlign="center">No.</Table.ColumnHeader>
               <Table.ColumnHeader>Name</Table.ColumnHeader>
-              {search && (
-                <>
-                  <Table.ColumnHeader>Date</Table.ColumnHeader>
-                </>
-              )}
-
-              <Table.ColumnHeader>Time</Table.ColumnHeader>
-              <Table.ColumnHeader>Illness</Table.ColumnHeader>
-              <Table.ColumnHeader>Medicine</Table.ColumnHeader>
-              <Table.ColumnHeader textAlign="end"></Table.ColumnHeader>
+              <Table.ColumnHeader textAlign="end">Mark Attendance</Table.ColumnHeader>
             </Table.Row>
           </Table.Header>
 
           <Table.Body>
-            {items.map((item) => (
-              <Table.Row key={item.id}>
-                <Table.Cell textAlign="center">{item.patientNo}</Table.Cell>
-                <Table.Cell>{item.name}</Table.Cell>
-                {search && (
-                  <>
-                    <Table.Cell>
-                      {item.createdAt && item.createdAt.toDate ?
-                        item.createdAt.toDate().toLocaleDateString("en-GB", { day: "numeric", month: "short" }) :
-                        "Invalid Date"}
-                    </Table.Cell>
-                  </>
-                )}
+  {items.map((item) => (
+    <Table.Row key={item.id}>
+      <Table.Cell textAlign="center">{item.memberNo}</Table.Cell>
+      <Table.Cell>{item.name}</Table.Cell>
 
-                <Table.Cell>
-                  {item.createdAt && item.createdAt.toDate ?
-                    item.createdAt.toDate().toLocaleTimeString("en-US", {
-                      hour: "numeric",
-                      minute: "numeric",
-                      hour12: true
-                    }) :
-                    "Invalid Time"}
-                </Table.Cell>
-                <Table.Cell>{item.illness}</Table.Cell>
-                <Table.Cell>{item.medicine}</Table.Cell>
-                <Table.Cell textAlign="end">---</Table.Cell>
-              </Table.Row>
-            ))}
-          </Table.Body>
+      <Table.Cell textAlign="end">
+        <Button 
+          variant={item.status === 'present' ? 'subtle' : 'solid'} 
+          onClick={() => handleAttendanceClick(item.id)}
+        >
+          {item.status === 'present' ? 'Mark Absent' : 'Mark Present'}
+        </Button>
+      </Table.Cell>
+    </Table.Row>
+  ))}
+</Table.Body>
         </Table.Root>
       </Table.ScrollArea>
 
