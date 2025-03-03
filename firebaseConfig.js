@@ -2,6 +2,7 @@
 import { initializeApp } from "firebase/app";
 //import { getAnalytics } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
+import { getMessaging, getToken, onMessage } from "firebase/messaging"; // Add messaging import
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
@@ -20,6 +21,10 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-//const analytics = getAnalytics(app);
+// Ensure Firebase Messaging is only initialized on the client-side
+let messaging;
+if (typeof window !== "undefined") {
+  messaging = getMessaging(app); // Initialize messaging only in the browser
+}
 
-export { db };
+export { db, messaging  };

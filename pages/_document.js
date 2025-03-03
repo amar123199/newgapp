@@ -1,4 +1,5 @@
 import { Html, Head, Main, NextScript } from "next/document";
+import Script from "next/script";
 
 export default function Document() {
   return (
@@ -14,6 +15,17 @@ export default function Document() {
       
         <Main />
         <NextScript />
+        {/* <Script>
+        if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.register('/firebase-messaging-sw.js')
+                .then((registration) => {
+                  console.log('Service Worker registered:', registration);
+                })
+                .catch((err) => {
+                  console.error('Service Worker registration failed:', err);
+                })
+            }
+        </Script> */}
       </body>
     </Html>
   );
