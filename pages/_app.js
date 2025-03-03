@@ -2,11 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { Provider } from "../components/ui/provider"
 import { messaging } from '../firebaseConfig'; // Import messaging
 import { getMessaging, getToken, onMessage } from "firebase/messaging"; // Add messaging import
+import { Directions } from '@mui/icons-material';
 
 export default function App({ Component, pageProps }) {
 
   // Create a state to track if permission has been requested
   const [permissionRequested, setPermissionRequested] = useState(false);
+  const [ntoken, setNToken] = useState("")
 
   const requestNotificationPermission = async () => {
     try {
@@ -14,6 +16,7 @@ export default function App({ Component, pageProps }) {
       if (permission === 'granted') {
         const token = await getToken(messaging, { vapidKey: 'BPqBEn4y5T_7aSuMcMH7glEmP_8NuNOkqVCq8E3P7HibV-Iim45tZDYRi_a8RbnHevS_xiUvZzZMdJPfl0hQV6I' }); // Add your VAPID key
         console.log('Notification permission granted. Token:', token);
+        setNToken(token);
         // Send this token to your server to subscribe the user to notifications
       } else {
         console.error('Notification permission denied');
@@ -61,7 +64,6 @@ export default function App({ Component, pageProps }) {
     left: 0,
     width: '100%',
     height: '100vh', // Full screen height
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Optional: Background overlay
   };
 
   const buttonStyle = {
@@ -95,7 +97,9 @@ export default function App({ Component, pageProps }) {
           >
             Enable Notifications
           </button>
+          <p>{ntoken}</p>
         </div>
+       
     </Provider>
   )
 }
