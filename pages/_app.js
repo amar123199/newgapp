@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/router'; // Import useRouter hook
 import { Provider } from "../components/ui/provider"
 import { messaging } from '../firebaseConfig'; // Import messaging
 import { getMessaging, getToken, onMessage } from "firebase/messaging"; // Add messaging import
 import { Directions } from '@mui/icons-material';
 
 export default function App({ Component, pageProps }) {
+  const router = useRouter(); // Use useRouter to get current path
 
   // Create a state to track if permission has been requested
   const [permissionRequested, setPermissionRequested] = useState(false);
@@ -84,22 +86,30 @@ export default function App({ Component, pageProps }) {
   };
 
 
+ // Only render the button on /payment page
+ if (router.pathname !== '/payment') {
   return (
     <Provider>
       <Component {...pageProps} />
-      {/* Trigger permission request on button click */}
-      <div style={buttonContainerStyle}>
-          <button 
-            style={buttonStyle}
-            onClick={handlePermissionRequest}
-            onMouseEnter={(e) => e.target.style = { ...buttonStyle, ...buttonHoverStyle }} // On hover
-            onMouseLeave={(e) => e.target.style = buttonStyle} // Reset on mouse leave
-          >
-            Enable Notifications
-          </button>
-          <p>{ntoken}</p>
-        </div>
-       
     </Provider>
-  )
+  );
+}
+
+return (
+  <Provider>
+    <Component {...pageProps} />
+    {/* Trigger permission request on button click */}
+    <div style={buttonContainerStyle}>
+      <button 
+        style={buttonStyle}
+        onClick={handlePermissionRequest}
+        onMouseEnter={(e) => e.target.style = { ...buttonStyle, ...buttonHoverStyle }} // On hover
+        onMouseLeave={(e) => e.target.style = buttonStyle} // Reset on mouse leave
+      >
+        Enable Notifications
+      </button>
+      <p>{ntoken}</p>
+    </div>
+  </Provider>
+);
 }

@@ -22,9 +22,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 // Ensure Firebase Messaging is only initialized on the client-side
-let messaging;
-if (typeof window !== "undefined") {
-  messaging = getMessaging(app); // Initialize messaging only in the browser
-}
+// let messaging;
+// if (typeof window !== "undefined") {
+//   messaging = getMessaging(app); // Initialize messaging only in the browser
+// }
 
-export { db, messaging  };
+export { db,   };

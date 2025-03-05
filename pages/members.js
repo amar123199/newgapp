@@ -2,20 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { useSwipeable } from 'react-swipeable';  // Importing the swipeable hook
 import {
   Table, Stat, Box, Input, FormControl, Stack, DrawerActionTrigger, Text, Separator, ButtonGroup, Textarea,
-  DrawerBackdrop,
-  DrawerBody,
-  DrawerCloseTrigger,
-  DrawerContent,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerRoot,
-  DrawerTitle,
-  DrawerTrigger, Button, CheckboxGroup, Group, NativeSelect, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, StackSeparator,
+ Button, CheckboxGroup, Group, NativeSelect, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, StackSeparator,
   Flex, InputAddon, HStack, FormatNumber, Badge,
   Heading
 } from '@chakra-ui/react';
 import { Field } from '../components/ui/field';
-import { CheckboxCard } from "@/components/ui/checkbox-card"
+import { RadioCardItem,RadioCardLabel,RadioCardRoot } from "@/components/ui/radio-card"
 import { motion, AnimatePresence } from 'framer-motion'; // Importing framer-motion for animations
 import BottomNavigationBar from '../components/BottomNavigationBar';
 import FloatingActionButton from '../components/FloatingActionButton';
@@ -25,29 +17,17 @@ import StatCard from '../components/StatCard'; // Import the StatCard component
 
 import { Drawer, SwipeableDrawer, Typography } from '@mui/material';
 import PeopleIcon from '@mui/icons-material/People'; // For Members
-import FitnessCenterIcon from '@mui/icons-material/FitnessCenter'; 
-import SportsGymnasticsIcon from '@mui/icons-material/SportsGymnastics'; 
-import SportsKabaddiIcon from '@mui/icons-material/SportsKabaddi'; 
-
-
-
-// Import Swiper React components
-import { Swiper, SwiperSlide } from 'swiper/react';
-
-// Import Swiper styles
-import 'swiper/css';
+import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
+import SportsGymnasticsIcon from '@mui/icons-material/SportsGymnastics';
+import SportsKabaddiIcon from '@mui/icons-material/SportsKabaddi';
 
 import { collection, getDocs, addDoc, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../firebaseConfig'; // Import Firestore config
 
 
 
-
-
-
 export default function Members() {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [swipeDirection, setSwipeDirection] = useState(0); // Track swipe direction
   const [open, setOpen] = useState(false)
 
   const [searchName, setSearchName] = useState('');
@@ -67,81 +47,38 @@ export default function Members() {
   const [items, setItems] = useState([]);
   const [memberNo, setMemberNo] = useState(0); // Track the member number
 
-  const [selectedTraining, setSelectedTraining] = useState([]);
+  const [selectedTraining, setSelectedTraining] = useState('weight');
   const [selectedPackage, setSelectedPackage] = useState(1);
   const [totalFees, setTotalFees] = useState(0);
+  const [savings, setSavings] = useState(0);
 
   const [startDate, setStartDate] = useState(new Date());  // Start date is today
   const [endDate, setEndDate] = useState(null);  // This will hold the calculated end date
 
 
 
-
   useEffect(() => {
-
-
     fetchData();
-  }, [currentDate]);
+  }, []);
 
   const fetchData = async () => {
     const querySnapshot = await getDocs(collection(db, "members")); // Firestore collection name
     const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
     // For each member, fetch the end date from their membership subcollection
-  const membersWithEndDate = await Promise.all(data.map(async (member) => {
-    const membershipSnapshot = await getDocs(collection(db, "members", member.id, "membership"));
-    const membershipData = membershipSnapshot.docs.map(doc => doc.data());
+    const membersWithEndDate = await Promise.all(data.map(async (member) => {
+      const membershipSnapshot = await getDocs(collection(db, "members", member.id, "membership"));
+      const membershipData = membershipSnapshot.docs.map(doc => doc.data());
 
-    const endDate = membershipData.length > 0 ? membershipData[0].endDate.toDate() : null; // Assuming there is at least one membership
-    return { ...member, endDate }; // Add endDate to the member object
-  }));
+      const endDate = membershipData.length > 0 ? membershipData[0].endDate.toDate() : null; // Assuming there is at least one membership
+      return { ...member, endDate }; // Add endDate to the member object
+    }));
 
-    // Filter data to only include entries created on the selected date (currentDate)
-  const filteredData = membersWithEndDate.filter(item => isCreatedOnDate(item.createdAt, currentDate));
-
-    // Sort the filtered data by memberNo in ascending order
-    const sortedData = filteredData.sort((a, b) => b.memberNo - a.memberNo);
+    // Remove filtering by currentDate - fetch all data
+    const sortedData = membersWithEndDate.sort((a, b) => b.memberNo - a.memberNo);
 
     setItems(sortedData);
-     console.log(sortedData)
-    // Set the member number to be the next available number (i.e., current member count + 1)
-    setMemberNo(filteredData.length + 1);
-  };
-
-  // Helper function to compare if the document's createdAt date matches the currentDate
-  const isCreatedOnDate = (createdAt, targetDate) => {
-    // Check if createdAt exists and is a Firestore timestamp (check if 'seconds' exists)
-    if (!createdAt || !createdAt.seconds) {
-      console.error("Invalid createdAt field:", createdAt); // Log if something is wrong with createdAt
-      return false; // Return false if createdAt is not defined or invalid
-    }
-
-    const target = new Date(targetDate); // The selected target date (currentDate)
-    const createdDate = new Date(createdAt.seconds * 1000); // Firebase stores timestamp in seconds
-
-    // Compare the year, month, and date parts of the date
-    return target.getFullYear() === createdDate.getFullYear() &&
-      target.getMonth() === createdDate.getMonth() &&
-      target.getDate() === createdDate.getDate();
-  };
-
-  const handlers = useSwipeable({
-    onSwipedLeft: () => handleDateChange(1, 100),
-    onSwipedRight: () => handleDateChange(-1, -100),
-    trackMouse: true
-  });
-
-  const handleDateChange = (days, direction) => {
-    const newDate = new Date(currentDate);
-    newDate.setDate(newDate.getDate() + days);
-    // Check if the new date is in the future
-    if (newDate > new Date()) {
-      newDate.setDate(new Date().getDate());  // Set the date to today if it's in the future
-    }
-
-    setCurrentDate(newDate);
-    setSwipeDirection(direction); // Set the direction for animation
-    console.log(currentDate)
+    setMemberNo(sortedData.length + 1); // Update memberNo
   };
 
   const formatDate = (date) => {
@@ -189,19 +126,19 @@ export default function Members() {
   };
 
   const toggleDrawer = () => {
-   // Reset form states to their initial values
-  setName('');
-  setPhone('');
-  setFeesDue('');
-  setAttendance('');
-  setJoinedDate(new Date());  // or set it to null if needed
-  setSelectedTraining([]);
-  setSelectedPackage(1);  // Default to the first package
-  setStartDate(new Date());  // Default to today
-  setEndDate(null);  // Set the end date to null initially
-  setSearchName(''); // Clear the search input
-  setOpen(false); // Close the drawer
-  setSearch(false); // Close the search input
+    // Reset form states to their initial values
+    setName('');
+    setPhone('');
+    setFeesDue('');
+    setAttendance('');
+    setJoinedDate(new Date());  // or set it to null if needed
+    setSelectedTraining('weight');
+    setSelectedPackage(1);  // Default to the first package
+    setStartDate(new Date());  // Default to today
+    setEndDate(null);  // Set the end date to null initially
+    setSearchName(''); // Clear the search input
+    setOpen(false); // Close the drawer
+    setSearch(false); // Close the search input
 
   };
 
@@ -219,7 +156,7 @@ export default function Members() {
 
     console.log({ capitalizedName, phone });
 
-    if (!capitalizedName || !phone || selectedTraining.length === 0) {
+    if (!capitalizedName || !phone || !selectedTraining) {
       alert("Please fill all fields before saving.");
       return;
     }
@@ -242,21 +179,21 @@ export default function Members() {
         startDate: startDate,
         endDate: endDate,
         fees: totalFees,
-    });
+      });
 
-    console.log("Membership details added with ID: ", membershipRef.id);
+      console.log("Membership details added with ID: ", membershipRef.id);
 
-    // Create a global membership record in the 'memberships' collection
-   const globalmembership = await addDoc(collection(db, "memberships"), {
-      memberID: docRef.id,
-      trainingType: selectedTraining,
-      package: selectedPackage,
-      startDate: startDate,
-      endDate: endDate,
-      fees: totalFees,
-  });
+      // Create a global membership record in the 'memberships' collection
+      const globalmembership = await addDoc(collection(db, "memberships"), {
+        memberID: docRef.id,
+        trainingType: selectedTraining,
+        package: selectedPackage,
+        startDate: startDate,
+        endDate: endDate,
+        fees: totalFees,
+      });
 
-  console.log("global membership details added with ID: ", globalmembership.id);
+      console.log("global membership details added with ID: ", globalmembership.id);
 
       // Update local state to reflect new member, converting the createdAt to a valid Date object
       const newMember = {
@@ -347,69 +284,74 @@ export default function Members() {
     //setSearchResults(results); // Update search results state
   };
 
-  const resetToToday = () => {
-    const today = new Date();
-    setCurrentDate(today); // Reset to today's date
-    fetchData(); // Fetch data based on today's date
+  const handleTrainingChange = (value) => {
+    setSelectedTraining(value);  // Set the selected value (weight, cardio, personal)
   };
 
-  const handleTrainingChange = (event) => {
-    const { value, checked } = event.target;
-  
-    setSelectedTraining((prev) => {
-      if (checked) {
-        // If the checkbox is checked, add it to the list
-        return [...prev, value];
-      } else {
-        // If the checkbox is unchecked, remove it from the list
-        return prev.filter((item) => item !== value);
-      }
-    });
+  const calculateSavings = () => {
+    const basePrice = trainingFees[selectedTraining][1]*[selectedPackage]; // 1-month fee
+    const selectedPrice = trainingFees[selectedTraining][selectedPackage]; // Selected package fee
+    const savings = basePrice - selectedPrice;
+    setSavings(savings);
+    console.log(basePrice)
+    return savings > 0 ? savings : 0;
+    
+  };
+
+  const calculateTotalFees = (selectedTraining, selectedPackage) => {
+    return trainingFees[selectedTraining][selectedPackage];
   };
 
   const handlePackageChange = (event) => {
     const selectedPackageValue = event.target.value;
     setSelectedPackage(selectedPackageValue);
-    
-    // Calculate the number of days to add (30 days per month)
-    const daysToAdd = selectedPackageValue * 30;
-  
-    // Create a new Date object for the end date by adding the number of days
-    const newEndDate = new Date(startDate); // Start with today's date (start date)
-    newEndDate.setDate(newEndDate.getDate() + daysToAdd);
-  
-    // Set the end date
-    setEndDate(newEndDate);
-   
+
   };
-  
+
   useEffect(() => {
     // Set default end date to 1 month (30 days) from start date when the page loads
     const defaultEndDate = new Date(startDate);  // Start with the current start date
     defaultEndDate.setDate(defaultEndDate.getDate() + 30);  // Add 30 days (1 month)
-  
+
     setEndDate(defaultEndDate);  // Set the end date to default
   }, [startDate]);  // This effect runs only once on component mount or when startDate changes
-  
-  
-// Format dates (e.g., Feb 22, 2025)
-const formatDate2 = (date) => {
-  const options = { month: 'short', day: 'numeric', year: 'numeric' };
-  return date.toLocaleDateString('en-US', options);
-};
+
+
+  // Format dates (e.g., Feb 22, 2025)
+  const formatDate2 = (date) => {
+    const options = { month: 'short', day: 'numeric', year: 'numeric' };
+    return date.toLocaleDateString('en-US', options);
+  };
   useEffect(() => {
     // Calculate total based on selected training and package
-    const trainingTotal = selectedTraining.reduce((sum, type) => sum + trainingFees[type], 0);
-    const packageMultiplier = selectedPackage || 1;
-    setTotalFees(trainingTotal * packageMultiplier);
-    console.log(selectedTraining)
+  //  const trainingTotal = trainingFees[selectedTraining];
+  //   const packageMultiplier = selectedPackage || 1;
+    //setTotalFees(trainingTotal * packageMultiplier);
+
+    // Calculate total fees based on selected training and package
+  const total = calculateTotalFees(selectedTraining, selectedPackage);
+  setTotalFees(total);
+
+  // Calculate savings
+  const savings = calculateSavings(selectedTraining, selectedPackage);
+  //setSavings(savings); // Assuming you have a state for savings
+
+    // Calculate the number of days to add (30 days per month)
+    const daysToAdd = selectedPackage * 30;
+
+    // Create a new Date object for the end date by adding the number of days
+    const newEndDate = new Date(startDate); // Start with today's date (start date)
+    newEndDate.setDate(newEndDate.getDate() + daysToAdd);
+
+    // Set the end date
+    setEndDate(newEndDate);
   }, [selectedTraining, selectedPackage]);
 
   // Utility function to determine badge color based on endDate
 const getBadgeColorByDateDifference = (endDate) => {
   if (!endDate) {
     console.error("Invalid endDate.");
-    return "gray"; // Return default gray color if endDate is invalid
+    return { color: "gray", displayText: "" }; // Return default gray color if endDate is invalid
   }
 
   // Convert endDate string to Date object
@@ -418,7 +360,7 @@ const getBadgeColorByDateDifference = (endDate) => {
   // Check if endDateObj is a valid Date
   if (isNaN(endDateObj.getTime())) {
     console.error("Invalid endDate object:", endDateObj);
-    return "gray"; // Return default gray color if endDate conversion failed
+    return { color: "gray", displayText: "" }; // Return default gray color if endDate conversion failed
   }
 
   // Get current date
@@ -427,33 +369,35 @@ const getBadgeColorByDateDifference = (endDate) => {
   // Calculate the difference in milliseconds
   const diffTime = endDateObj - currentDate;
 
-  // If the diffTime is negative, it means the endDate is in the past, handle this case
-  if (diffTime < 0) {
-    console.log("The end date has already passed.");
-    return "gray"; // Return gray if the endDate is in the past
-  }
-
   // Convert milliseconds to days and round it to the nearest whole number
   const diffDays = Math.ceil(diffTime / (1000 * 3600 * 24)); // This rounds up to the nearest integer
-  
-  console.log(diffDays + " days difference");
+
+  // Handle negative days (if endDate is in the past)
+  if (diffDays < 0) {
+    return { color: "red", displayText: `-${Math.abs(diffDays)} days`, variant: "solid" }; // Negative days
+  }
+
+  // Handle 0 days (if endDate is today)
+  if (diffDays === 0) {
+    return { color: "red", displayText: "Today", variant: "solid" }; // Display "Today" for today with red color
+  }
 
   // Return color and display text based on the difference
   if (diffDays <= 3) {
-    return { color: "red", displayText: `${diffDays} days` }; // Less than or equal to 3 days
+    return { color: "red", displayText: `${diffDays} days`, variant: "subtle" }; // Less than or equal to 3 days
   } else if (diffDays <= 7) {
-    return { color: "yellow", displayText: `${diffDays} days` }; // Less than or equal to 7 days
+    return { color: "yellow", displayText: `${diffDays} days`, variant: "subtle" }; // Less than or equal to 7 days
   } else {
-    return { color: "gray", displayText: formatDate2(endDate) }; // Display the actual date if more than 7 days
+    return { color: "gray", displayText: formatDate2(endDate), variant: "subtle" }; // Display the actual date if more than 7 days
   }
 };
-  
+
 
   return (
     <>
       <div>
-        <Box  p={6} >
-          <Heading>Total Members: {memberNo-1}</Heading>
+        <Box p={6} >
+          <Heading>Total Members: {memberNo - 1}</Heading>
         </Box>
         <FloatingActionButton onClick={handleSearchClick} />
       </div>
@@ -466,22 +410,22 @@ const getBadgeColorByDateDifference = (endDate) => {
               <Table.ColumnHeader>Name</Table.ColumnHeader>
               <Table.ColumnHeader>Phone</Table.ColumnHeader>
               <Table.ColumnHeader>M. End Date</Table.ColumnHeader>
-           
+
               <Table.ColumnHeader textAlign="end">Joined</Table.ColumnHeader>
             </Table.Row>
           </Table.Header>
 
           <Table.Body>
   {items.map((item) => {
-   // Get the badge color and display text based on the endDate
-   const { color: badgeColor, displayText } = getBadgeColorByDateDifference(item.endDate);
+    // Get the badge color and display text based on the endDate
+    const { color: badgeColor, displayText, variant } = getBadgeColorByDateDifference(item.endDate);
 
-   // Format the createdAt Firestore timestamp into the desired format
-   const formattedDate = new Date(item.createdAt.seconds * 1000).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short", // "Apr"
-    day: "numeric", // "1"
-  });
+    // Format the createdAt Firestore timestamp into the desired format
+    const formattedDate = new Date(item.createdAt.seconds * 1000).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short", // "Apr"
+      day: "numeric", // "1"
+    });
 
     return (
       <Table.Row key={item.id}>
@@ -489,9 +433,9 @@ const getBadgeColorByDateDifference = (endDate) => {
         <Table.Cell>{item.name}</Table.Cell>
         <Table.Cell>{item.phone}</Table.Cell>
         <Table.Cell>
-        <Badge size="md" colorPalette={badgeColor}>
-                    {displayText}
-                  </Badge>
+          <Badge size="md" colorPalette={badgeColor} variant={variant}>
+            {displayText}
+          </Badge>
         </Table.Cell>
         <Table.Cell textAlign="end">{formattedDate}</Table.Cell>
       </Table.Row>
@@ -508,7 +452,6 @@ const getBadgeColorByDateDifference = (endDate) => {
         anchor='top'
         open={open}
         onClose={toggleDrawer}
-
       >
 
         <form onSubmit={handleSubmit}>
@@ -521,40 +464,54 @@ const getBadgeColorByDateDifference = (endDate) => {
 
             {/* Name Field */}
             <Field label="Name" required>
-            <Group attached width="100%">
-            <InputAddon><PeopleIcon/></InputAddon>
-              <Input
-                ref={nameInputRef}
-                variant="outline"
-                size="xl"
-                placeholder="Enter Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
+              <Group attached width="100%">
+                <InputAddon><PeopleIcon /></InputAddon>
+                <Input
+                  ref={nameInputRef}
+                  variant="outline"
+                  size="xl"
+                  placeholder="Enter Name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
               </Group>
             </Field>
 
             {/* Phone Field */}
             <Field label="Phone" required>
-            <Group attached width="100%">
-            <InputAddon>+91</InputAddon>
-              <Input
-                variant="outline"
-                size="xl"
-                placeholder="Enter Phone"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)} // Add state for phone
-                type="tel"
-              />
+              <Group attached width="100%">
+                <InputAddon>+91</InputAddon>
+                <Input
+                  variant="outline"
+                  size="xl"
+                  placeholder="Enter Phone"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)} // Add state for phone
+                  type="tel"
+                />
+              </Group>
+            </Field>
+
+            {/* Joining Date Field */}
+            <Field label=" Joining Date" required>
+              <Group attached width="100%">
+                <InputAddon>Join</InputAddon>
+                <Input
+                  variant="outline"
+                  size="xl"
+                  type="date"
+                  value={startDate.toISOString().split('T')[0]} // Display startDate in YYYY-MM-DD format
+                  onChange={(e) => setStartDate(new Date(e.target.value))} // Add state for phone
+                />
               </Group>
             </Field>
 
             {/* Type  Field */}
-            
-              <CheckboxGroup width="100%" required onChange={handleTrainingChange}>
-              <Box pb={2} pt={2} overflowX="auto"> {/* This enables horizontal scrolling */}
+            <Field label="Training Type" required>
+            <RadioCardRoot width="100%" required defaultValue="weight" >
+              <Box pb={2} pl={1} pt={2} overflowX="auto"> {/* This enables horizontal scrolling */}
                 <Flex gap={3} justify="space-between" direction="row">
-                  <CheckboxCard
+                  <RadioCardItem
 
                     label="Weight"
                     value="weight"
@@ -562,8 +519,10 @@ const getBadgeColorByDateDifference = (endDate) => {
                     colorPalette="teal"
                     variant="surface"
                     icon={<FitnessCenterIcon />}
+                    onChange={() => handleTrainingChange('weight')}
+                    checked={selectedTraining === 'weight'}
                   />
-                  <CheckboxCard
+                  <RadioCardItem
 
                     label="Cardio"
                     value="cardio"
@@ -571,8 +530,10 @@ const getBadgeColorByDateDifference = (endDate) => {
                     colorPalette="teal"
                     variant="surface"
                     icon={<SportsGymnasticsIcon />}
+                    onChange={() => handleTrainingChange('cardio')}
+                    checked={selectedTraining === 'cardio'}
                   />
-                  <CheckboxCard
+                  <RadioCardItem
 
                     label="Personal"
                     value="personal"
@@ -580,16 +541,19 @@ const getBadgeColorByDateDifference = (endDate) => {
                     colorPalette="teal"
                     variant="surface"
                     icon={<SportsKabaddiIcon />}
+                    onChange={() => handleTrainingChange('personal')}
+                    checked={selectedTraining === 'personal'}
                   />
                 </Flex>
-                </Box>
-              </CheckboxGroup>
-      
+              </Box>
+            </RadioCardRoot>
+            </Field>
+
 
             {/* Attendance Field */}
             <Field label="Period" required>
               <NativeSelect.Root size="xl" variant="outline">
-                <NativeSelect.Field  onChange={handlePackageChange} value={selectedPackage}>
+                <NativeSelect.Field onChange={handlePackageChange} value={selectedPackage}>
                   <option value={1}>1 Month</option>
                   <option value={3}>3 Month</option>
                   <option value={6}>6 Month</option>
@@ -602,28 +566,26 @@ const getBadgeColorByDateDifference = (endDate) => {
             <Separator />
 
             <Stat.Root>
-          <Stat.Label>Total Fees</Stat.Label>
-          <HStack>
-            <Stat.ValueText>
-              {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(totalFees)}
-            </Stat.ValueText>
-            <Badge colorPalette="green">- ₹1200 Saving</Badge>
-          </HStack>
-          <Stat.HelpText>
-            {selectedTraining.join(', ')} x {packageFees[selectedPackage]} Months
-          </Stat.HelpText>
-        </Stat.Root>
+  <Stat.Label>Total Fees</Stat.Label>
+  <HStack>
+    <Stat.ValueText>
+      {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(totalFees)}
+    </Stat.ValueText>
+    {savings > 0 && <Badge colorPalette="green" size="md">  {savings} Saving</Badge>}
+  </HStack>
+  <Stat.HelpText>
+    {selectedTraining} x {selectedPackage} Months
+  </Stat.HelpText>
+</Stat.Root>
 
-        <Separator />
+            <Separator />
 
-        <Box>
-        <Text fontSize="xs">Start Date - End Date</Text>
-        <Text fontSize="lg" fontWeight="medium">
-          {formatDate2(startDate)} - {endDate ? formatDate2(endDate) : ''}
-        </Text>
-      </Box>
-
-        
+            <Box>
+              <Text fontSize="xs">Start Date - End Date</Text>
+              <Text fontSize="lg" fontWeight="medium">
+                {formatDate2(startDate)} - {endDate ? formatDate2(endDate) : ''}
+              </Text>
+            </Box>
 
             <Separator />
 
@@ -637,8 +599,6 @@ const getBadgeColorByDateDifference = (endDate) => {
           </Stack>
         </form>
       </Drawer>
-
-
 
       {/* Fixed Search Bar */}
       {search && (
@@ -662,44 +622,8 @@ const getBadgeColorByDateDifference = (endDate) => {
 
         </div>
       )}
-      {/* <div style={{position:"absolute"}}>
-        <DrawerRoot open={open} placement="bottom">
-          <DrawerBackdrop />
-          <DrawerContent roundedTop="lg" bottom="0" zIndex="2000" >
-            <DrawerHeader>
-              <DrawerTitle>Drawer Title</DrawerTitle>
-            </DrawerHeader>
-            <DrawerBody>
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-            </DrawerBody>
-            <DrawerFooter>
-              <DrawerCloseTrigger asChild>
-                <Button variant="outline">Cancel</Button>
-              </DrawerCloseTrigger>
-              <Button>Save</Button>
-            </DrawerFooter>
-          </DrawerContent>
-        </DrawerRoot>
-        </div> */}
-
-      {/* <Stat.Root>
-          <Stat.Label>today</Stat.Label>
-          <Stat.ValueText>{formattedDate}</Stat.ValueText>
-        </Stat.Root>
-
-        <Stat.Root>
-          <Stat.Label>Yesterday</Stat.Label>
-          <Stat.ValueText>Yesterdat</Stat.ValueText>
-        </Stat.Root> */}
-
-
-
-
+     
       {new Date().toDateString() === currentDate.toDateString() && <AddActionButton onClick={handleFabClick} />}
-      {new Date().toDateString() !== currentDate.toDateString() && <ResetActionButton onClick={resetToToday} />}
-
-
-      {/* <FloatingActionButton onClick={handleSearchClick} /> */}
 
     </>
   );
@@ -707,10 +631,26 @@ const getBadgeColorByDateDifference = (endDate) => {
 
 
 const trainingFees = {
-  weight: 500,
-  cardio: 300,
-  personal: 2000,
+  weight: {
+    1: 500,
+    3: 1300,
+    6: 2400,
+    12: 4500,
+  },
+  cardio: {
+    1: 700,
+    3: 1800,
+    6: 4000,
+    12: 7500,
+  },
+  personal: {
+    1: 2000,
+    3: 5000,
+    6: 10000,
+    12: 18000,
+  },
 };
+
 
 const packageFees = {
   '1_month': 1,
