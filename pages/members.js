@@ -8,6 +8,7 @@ import {
 } from '@chakra-ui/react';
 import { Field } from '../components/ui/field';
 import { RadioCardItem,RadioCardLabel,RadioCardRoot } from "@/components/ui/radio-card"
+import { CheckboxCard } from "@/components/ui/checkbox-card"
 import { motion, AnimatePresence } from 'framer-motion'; // Importing framer-motion for animations
 import BottomNavigationBar from '../components/BottomNavigationBar';
 import FloatingActionButton from '../components/FloatingActionButton';
@@ -47,7 +48,7 @@ export default function Members() {
   const [items, setItems] = useState([]);
   const [memberNo, setMemberNo] = useState(0); // Track the member number
 
-  const [selectedTraining, setSelectedTraining] = useState('weight');
+  const [selectedTraining, setSelectedTraining] = useState(["weight"]);
   const [selectedPackage, setSelectedPackage] = useState(1);
   const [totalFees, setTotalFees] = useState(0);
   const [savings, setSavings] = useState(0);
@@ -75,7 +76,7 @@ export default function Members() {
     }));
 
     // Remove filtering by currentDate - fetch all data
-    const sortedData = membersWithEndDate.sort((a, b) => b.memberNo - a.memberNo);
+    const sortedData = membersWithEndDate.sort((a, b) => a.endDate - b.endDate);
 
     setItems(sortedData);
     setMemberNo(sortedData.length + 1); // Update memberNo
@@ -132,7 +133,7 @@ export default function Members() {
     setFeesDue('');
     setAttendance('');
     setJoinedDate(new Date());  // or set it to null if needed
-    setSelectedTraining('weight');
+    setSelectedTraining(['weight']);
     setSelectedPackage(1);  // Default to the first package
     setStartDate(new Date());  // Default to today
     setEndDate(null);  // Set the end date to null initially
@@ -156,7 +157,7 @@ export default function Members() {
 
     console.log({ capitalizedName, phone });
 
-    if (!capitalizedName || !phone || !selectedTraining) {
+    if (!capitalizedName || !phone || selectedTraining.length === 0) {
       alert("Please fill all fields before saving.");
       return;
     }
@@ -285,26 +286,41 @@ export default function Members() {
   };
 
   const handleTrainingChange = (value) => {
-    setSelectedTraining(value);  // Set the selected value (weight, cardio, personal)
+    console.log(value)
+    setSelectedTraining((prevState) => {
+      // If the value is already selected, remove it
+      if (prevState.includes(value)) {
+        return prevState.filter((item) => item !== value);
+      }
+      // If the value is not selected, add it to the list
+      return [...prevState, value];
+    });
   };
 
   const calculateSavings = () => {
-    const basePrice = trainingFees[selectedTraining][1]*[selectedPackage]; // 1-month fee
-    const selectedPrice = trainingFees[selectedTraining][selectedPackage]; // Selected package fee
-    const savings = basePrice - selectedPrice;
-    setSavings(savings);
-    console.log(basePrice)
-    return savings > 0 ? savings : 0;
+    let totalSavings = 0;
+    selectedTraining.forEach((training) => {
+      const basePrice = trainingFees[training][1] * selectedPackage; // Base price per training type
+      const selectedPrice = trainingFees[training][selectedPackage]; // Selected package price for this training
+      totalSavings += basePrice - selectedPrice;
+    });
+    setSavings(totalSavings);
     
   };
 
-  const calculateTotalFees = (selectedTraining, selectedPackage) => {
-    return trainingFees[selectedTraining][selectedPackage];
+  const calculateTotalFees = () => {
+    if (!Array.isArray(selectedTraining)) {
+      console.error("selectedTraining is not an array:", selectedTraining);
+      return 0; // Return 0 if it's not an array
+    }
+  
+    return selectedTraining.reduce((total, training) => {
+      return total + trainingFees[training][selectedPackage];
+    }, 0);
   };
 
   const handlePackageChange = (event) => {
-    const selectedPackageValue = event.target.value;
-    setSelectedPackage(selectedPackageValue);
+    setSelectedPackage(event.target.value);
 
   };
 
@@ -323,18 +339,9 @@ export default function Members() {
     return date.toLocaleDateString('en-US', options);
   };
   useEffect(() => {
-    // Calculate total based on selected training and package
-  //  const trainingTotal = trainingFees[selectedTraining];
-  //   const packageMultiplier = selectedPackage || 1;
-    //setTotalFees(trainingTotal * packageMultiplier);
-
-    // Calculate total fees based on selected training and package
-  const total = calculateTotalFees(selectedTraining, selectedPackage);
-  setTotalFees(total);
-
-  // Calculate savings
-  const savings = calculateSavings(selectedTraining, selectedPackage);
-  //setSavings(savings); // Assuming you have a state for savings
+    const total = calculateTotalFees();
+    setTotalFees(total);
+    calculateSavings();
 
     // Calculate the number of days to add (30 days per month)
     const daysToAdd = selectedPackage * 30;
@@ -507,47 +514,47 @@ const getBadgeColorByDateDifference = (endDate) => {
             </Field>
 
             {/* Type  Field */}
-            <Field label="Training Type" required>
-            <RadioCardRoot width="100%" required defaultValue="weight" >
+            
+            <CheckboxGroup width="100%" required defaultValue="weight" defaultChecked="weight" >
               <Box pb={2} pl={1} pt={2} overflowX="auto"> {/* This enables horizontal scrolling */}
                 <Flex gap={3} justify="space-between" direction="row">
-                  <RadioCardItem
+                  <CheckboxCard
 
                     label="Weight"
-                    value="weight"
+                    //value="weight"
                     size="md"
                     colorPalette="teal"
                     variant="surface"
                     icon={<FitnessCenterIcon />}
                     onChange={() => handleTrainingChange('weight')}
-                    checked={selectedTraining === 'weight'}
+                    checked={selectedTraining.includes('weight')}
                   />
-                  <RadioCardItem
+                  <CheckboxCard
 
                     label="Cardio"
-                    value="cardio"
+                    //value="cardio"
                     size="md"
                     colorPalette="teal"
                     variant="surface"
                     icon={<SportsGymnasticsIcon />}
                     onChange={() => handleTrainingChange('cardio')}
-                    checked={selectedTraining === 'cardio'}
+                    checked={selectedTraining.includes('cardio')}
                   />
-                  <RadioCardItem
+                  <CheckboxCard
 
                     label="Personal"
-                    value="personal"
+                    //value="personal"
                     size="md"
                     colorPalette="teal"
                     variant="surface"
                     icon={<SportsKabaddiIcon />}
                     onChange={() => handleTrainingChange('personal')}
-                    checked={selectedTraining === 'personal'}
+                    checked={selectedTraining.includes('personal')}
                   />
                 </Flex>
               </Box>
-            </RadioCardRoot>
-            </Field>
+            </CheckboxGroup>
+           
 
 
             {/* Attendance Field */}
@@ -638,10 +645,10 @@ const trainingFees = {
     12: 4500,
   },
   cardio: {
-    1: 700,
-    3: 1800,
-    6: 4000,
-    12: 7500,
+    1: 200,
+    3: 500,
+    6: 1200,
+    12: 2500,
   },
   personal: {
     1: 2000,
