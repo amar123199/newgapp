@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSwipeable } from 'react-swipeable';  // Importing the swipeable hook
 import {
-  Table, Stat, Box, Input, FormControl, Stack, DrawerActionTrigger, Text, Separator, ButtonGroup, Textarea,
+  Table, Stat, Box, Input, FormControl, Stack, DrawerActionTrigger, Text, Separator, ButtonGroup, Textarea, HStack,
   DrawerBackdrop,
   DrawerBody,
   DrawerCloseTrigger,
@@ -10,7 +10,7 @@ import {
   DrawerHeader,
   DrawerRoot,
   DrawerTitle,
-  DrawerTrigger, Button, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, StackSeparator
+  DrawerTrigger, Button,Heading, Modal, ModalOverlay,Icon, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, StackSeparator
 } from '@chakra-ui/react';
 import { Field } from '../components/ui/field';
 import { motion, AnimatePresence } from 'framer-motion'; // Importing framer-motion for animations
@@ -21,6 +21,8 @@ import StatCard from '../components/StatCard'; // Import the StatCard component
 
 import { Drawer, SwipeableDrawer, Typography } from '@mui/material';
 
+import PeopleIcon from '@mui/icons-material/People'; // For Members
+
 
 
 // Import Swiper React components
@@ -29,7 +31,7 @@ import { Swiper, SwiperSlide } from 'swiper/react';
 // Import Swiper styles
 import 'swiper/css';
 
-import { collection, getDocs, addDoc, query, where, orderBy } from 'firebase/firestore';
+import { collection, getDocs, addDoc, query, where, orderBy,Timestamp } from 'firebase/firestore';
 import { db } from '../firebaseConfig'; // Import Firestore config
 
 
@@ -55,7 +57,8 @@ export default function Home() {
   const [medicine, setMedicine] = useState('');
 
   const [items, setItems] = useState([]);
-  const [patientNo, setPatientNo] = useState(0); // Track the patient number
+  const [todaysPresentCount, setTodaysPresentCount] = useState(0);
+
 
   const [speechTranscript, setSpeechTranscript] = useState(''); // To store the transcript
   const [isListening, setIsListening] = useState(false); // To track the listening state
@@ -64,24 +67,47 @@ export default function Home() {
   const recognition = useRef(null);
 
   useEffect(() => {
+    const fetchPresentCount = async () => {
+      const presentCount = await getTodaysPresentCount();
+      // Optionally, you can update some state to display the count in your UI
+      setTodaysPresentCount(presentCount); // Assuming you have a state variable for this
+    };
+  
+    fetchPresentCount();
+  }, []); // Fetch the count whenever the current date changes
+  
 
-
-    fetchData();
-  }, [currentDate]);
-
-  const fetchData = async () => {
-    const querySnapshot = await getDocs(collection(db, "patients")); // Firestore collection name
-    const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    // Filter data to only include entries created on the selected date (currentDate)
-    const filteredData = data.filter(item => isCreatedOnDate(item.createdAt, currentDate));
-
-    // Sort the filtered data by patientNo in ascending order
-    const sortedData = filteredData.sort((a, b) => b.patientNo - a.patientNo);
-
-    setItems(sortedData);
-
-    // Set the patient number to be the next available number (i.e., current patient count + 1)
-    setPatientNo(filteredData.length + 1);
+  const getTodaysPresentCount = async () => {
+    try {
+      // Get today's date in YYYY-MM-DD format for comparison
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);  // Set the time to midnight (00:00:00)
+      const startOfToday = Timestamp.fromDate(today); // Get Firestore Timestamp for midnight
+  
+      // Get tomorrow's date, and set the time to midnight
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+      const startOfTomorrow = Timestamp.fromDate(tomorrow); // Firestore Timestamp for the start of tomorrow
+  
+      // Query the 'attendances' collection for records from today (from midnight to just before tomorrow)
+      const q = query(
+        collection(db, "attendances"),
+        where("date", ">=", startOfToday), // Start of today
+        where("date", "<", startOfTomorrow), // Start of tomorrow (exclusive)
+        where("status", "==", "present") // Only "present" status
+      );
+  
+      const querySnapshot = await getDocs(q);
+  
+      // Get the count of documents that match today's present attendance
+      const presentCount = querySnapshot.size;
+  
+      console.log("Today's Present Count: ", presentCount); // Log the result
+      return presentCount;
+    } catch (error) {
+      console.error("Error getting today's present count: ", error);
+      return 0; // Return 0 if an error occurs
+    }
   };
 
   // Helper function to compare if the document's createdAt date matches the currentDate
@@ -284,215 +310,31 @@ export default function Home() {
     //setSearchResults(results); // Update search results state
   };
 
-  const resetToToday = () => {
-    const today = new Date();
-    setCurrentDate(today); // Reset to today's date
-    fetchData(); // Fetch data based on today's date
-  };
+ 
 
-  useEffect(() => {
-    // Initialize SpeechRecognition on component mount
-    if (window.SpeechRecognition || window.webkitSpeechRecognition) {
-      recognition.current = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-      recognition.current.lang = 'en-US'; // Set the language
-      recognition.current.interimResults = true; // Get real-time results
-      recognition.current.maxAlternatives = 1; // Get only the best result
-
-      recognition.current.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        console.log('Transcript:', transcript); // Log the transcript to the console
-        setSpeechTranscript(transcript); // Update the speech transcript in the state
-        setName(transcript); // Set the transcript as the name input value
-      };
-
-      recognition.current.onend = () => {
-        setIsListening(false); // Set listening state to false when recognition ends
-        console.log('Speech recognition stopped');
-      };
-
-      recognition.current.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-      };
-    } else {
-      console.log('SpeechRecognition is not supported in this browser.');
-    }
-
-    // Cleanup on component unmount
-    return () => {
-      if (recognition.current) {
-        recognition.current.onresult = null;
-        recognition.current.onend = null;
-        recognition.current.onerror = null;
-      }
-    };
-  }, []);
-
-  const handleStartListening = () => {
-    if (recognition.current) {
-      recognition.current.start();
-      setIsListening(true); // Set listening state to true
-      console.log('Speech recognition started');
-    }
-  };
-
-  const handleStopListening = () => {
-    if (recognition.current) {
-      recognition.current.stop(); // Stop the recognition
-      setIsListening(false); // Set listening state to false
-      console.log('Speech recognition stopped');
-    }
-  };
-
+  
 
 
   return (
     <>
       <div>
-        <Box {...handlers} p={6} bg="bg.surface" cursor="grab" overflow="hidden" >
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={formattedDate}
-              initial={{ opacity: 0, x: swipeDirection }} // Use swipeDirection here
-              animate={{ opacity: 1, x: 0 }}  // Animate to the center
-              exit={{ opacity: 0, x: -swipeDirection }} // Exit in the same direction
-              transition={{
-                duration: 0.0, // Short transition time
-                ease: "easeInOut", // This removes the springiness
-              }}
-            >
-
-              <Stat.Root>
-                <Stat.Label>Selected Date</Stat.Label>
-                <Stat.ValueText>{formattedDate}</Stat.ValueText>
-              </Stat.Root>
-            </motion.div>
-          </AnimatePresence>
-        </Box>
-        <FloatingActionButton onClick={handleSearchClick} />
+       <Heading>Rana Gym</Heading>
       </div>
 
-      <Table.ScrollArea borderWidth="1px" rounded="md" height="80vh">
-        <Table.Root size="md" stickyHeader marginBottom="120px">
-          <Table.Header>
-            <Table.Row bg="bg.subtle">
-              <Table.ColumnHeader textAlign="center">No.</Table.ColumnHeader>
-              <Table.ColumnHeader>Name</Table.ColumnHeader>
-              {search && (
-                <>
-                  <Table.ColumnHeader>Date</Table.ColumnHeader>
-                </>
-              )}
+      <Stat.Root maxW="240px" borderWidth="1px" p="4" rounded="md">
+      <HStack justify="space-between">
+        <Stat.Label>Today Attendance</Stat.Label>
+        <Icon color="fg.muted">
+          <PeopleIcon />
+        </Icon>
+      </HStack>
+      <Stat.ValueText>{todaysPresentCount}</Stat.ValueText>
+    </Stat.Root>
 
-              <Table.ColumnHeader>Time</Table.ColumnHeader>
-              <Table.ColumnHeader>Illness</Table.ColumnHeader>
-              <Table.ColumnHeader>Medicine</Table.ColumnHeader>
-              <Table.ColumnHeader textAlign="end"></Table.ColumnHeader>
-            </Table.Row>
-          </Table.Header>
-
-          <Table.Body>
-            {items.map((item) => (
-              <Table.Row key={item.id}>
-                <Table.Cell textAlign="center">{item.patientNo}</Table.Cell>
-                <Table.Cell>{item.name}</Table.Cell>
-                {search && (
-                  <>
-                    <Table.Cell>
-                      {item.createdAt && item.createdAt.toDate ?
-                        item.createdAt.toDate().toLocaleDateString("en-GB", { day: "numeric", month: "short" }) :
-                        "Invalid Date"}
-                    </Table.Cell>
-                  </>
-                )}
-
-                <Table.Cell>
-                  {item.createdAt && item.createdAt.toDate ?
-                    item.createdAt.toDate().toLocaleTimeString("en-US", {
-                      hour: "numeric",
-                      minute: "numeric",
-                      hour12: true
-                    }) :
-                    "Invalid Time"}
-                </Table.Cell>
-                <Table.Cell>{item.illness}</Table.Cell>
-                <Table.Cell>{item.medicine}</Table.Cell>
-                <Table.Cell textAlign="end">---</Table.Cell>
-              </Table.Row>
-            ))}
-          </Table.Body>
-        </Table.Root>
-      </Table.ScrollArea>
 
       <BottomNavigationBar onSearchClick={handleFabClick} />
 
-      {/* Drawer component */}
-      <Drawer
-        anchor='top'
-        open={open}
-        onClose={toggleDrawer}
-
-      >
-
-        <form onSubmit={handleSubmit}>
-          <Stack gap={5} p={6} >  {/* Added padding to the Stack */}
-            <box>
-              <Text fontSize="sm">Patient No</Text> {/* Small font size for label */}
-              <Text fontSize="3xl" fontWeight="bold">{patientNo}</Text> {/* Large number below Patient No */}
-            </box>
-
-
-            <Field label="Name" required>
-              <Input
-                ref={nameInputRef}
-                variant="subtle"
-                size="lg"
-                placeholder="Enter Name"
-                value={name}  // Bind the value of the input to the state
-                onChange={(e) => setName(e.target.value)}  // Update state on change
-              />
-            </Field>
-            <Button
-            onMouseDown={handleStartListening}
-              onMouseUp={handleStopListening}
-              onTouchStart={handleStartListening}  // Handle touch devices
-              onTouchEnd={handleStopListening}    // Handle touch devices
-              disabled={isListening} >M</Button>
-           
-            <Field label="Illness" required>
-              <Input
-                variant="subtle"
-                size="lg"
-                placeholder="Enter Illness"
-                value={illness}  // Bind the value of the input to the state
-                onChange={(e) => setIllness(e.target.value)}  // Update state on change
-              />
-            </Field>
-
-            <Field label="Medicine / Remarks" required>
-              <Textarea
-                variant="subtle"
-                size="lg"
-                placeholder="Enter Medicine"
-                value={medicine}  // Bind the value of the input to the state
-                onChange={(e) => setMedicine(e.target.value)}  // Update state on change
-              />
-            </Field>
-            <Separator />
-
-            <Stack direction="row" justify="space-between" align="center">
-              <ButtonGroup width="100%">
-                <Button size="lg" variant="subtle" flex="1" onClick={toggleDrawer} >Close</Button>
-                <Button size="lg" colorPalette="teal" flex="1" type="submit">
-                  Save
-                </Button>
-              </ButtonGroup>
-
-            </Stack>
-
-          </Stack>
-        </form>
-      </Drawer>
-
+    
 
 
       {/* Fixed Search Bar */}
@@ -517,44 +359,7 @@ export default function Home() {
 
         </div>
       )}
-      {/* <div style={{position:"absolute"}}>
-        <DrawerRoot open={open} placement="bottom">
-          <DrawerBackdrop />
-          <DrawerContent roundedTop="lg" bottom="0" zIndex="2000" >
-            <DrawerHeader>
-              <DrawerTitle>Drawer Title</DrawerTitle>
-            </DrawerHeader>
-            <DrawerBody>
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-            </DrawerBody>
-            <DrawerFooter>
-              <DrawerCloseTrigger asChild>
-                <Button variant="outline">Cancel</Button>
-              </DrawerCloseTrigger>
-              <Button>Save</Button>
-            </DrawerFooter>
-          </DrawerContent>
-        </DrawerRoot>
-        </div> */}
-
-      {/* <Stat.Root>
-          <Stat.Label>today</Stat.Label>
-          <Stat.ValueText>{formattedDate}</Stat.ValueText>
-        </Stat.Root>
-
-        <Stat.Root>
-          <Stat.Label>Yesterday</Stat.Label>
-          <Stat.ValueText>Yesterdat</Stat.ValueText>
-        </Stat.Root> */}
-
-
-
-
-      
-    
-
-
-      {/* <FloatingActionButton onClick={handleSearchClick} /> */}
+   
 
     </>
   );

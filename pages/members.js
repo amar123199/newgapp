@@ -22,7 +22,7 @@ import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import SportsGymnasticsIcon from '@mui/icons-material/SportsGymnastics';
 import SportsKabaddiIcon from '@mui/icons-material/SportsKabaddi';
 
-import { collection, getDocs, addDoc, query, where, orderBy } from 'firebase/firestore';
+import { collection, getDocs, addDoc, query, where, orderBy,limit } from 'firebase/firestore';
 import { db } from '../firebaseConfig'; // Import Firestore config
 
 
@@ -70,9 +70,15 @@ export default function Members() {
     const membersWithEndDate = await Promise.all(data.map(async (member) => {
       const membershipSnapshot = await getDocs(collection(db, "members", member.id, "membership"));
       const membershipData = membershipSnapshot.docs.map(doc => doc.data());
-
       const endDate = membershipData.length > 0 ? membershipData[0].endDate.toDate() : null; // Assuming there is at least one membership
-      return { ...member, endDate }; // Add endDate to the member object
+
+      const attendanceSnapshot = await getDocs(collection(db, "members", member.id, "attendance"));
+      const attendanceData = attendanceSnapshot.docs.map(doc => doc.data());
+      const lastAttendanceDate = attendanceData.length > 0 ? attendanceData[0].date.toDate() : null; // Assuming there is at least one membership
+
+       console.log(lastAttendanceDate)
+      
+      return { ...member, endDate,lastAttendanceDate }; // Add endDate to the member object
     }));
 
     // Remove filtering by currentDate - fetch all data
@@ -417,6 +423,7 @@ const getBadgeColorByDateDifference = (endDate) => {
               <Table.ColumnHeader>Name</Table.ColumnHeader>
               <Table.ColumnHeader>Phone</Table.ColumnHeader>
               <Table.ColumnHeader>M. End Date</Table.ColumnHeader>
+              <Table.ColumnHeader>L. Atnd. Date</Table.ColumnHeader>
 
               <Table.ColumnHeader textAlign="end">Joined</Table.ColumnHeader>
             </Table.Row>
@@ -434,6 +441,13 @@ const getBadgeColorByDateDifference = (endDate) => {
       day: "numeric", // "1"
     });
 
+    // Format the createdAt Firestore timestamp into the desired format
+    const formattedLastAttendanceDate = new Date(item.lastAttendanceDate).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short", // "Apr"
+      day: "numeric", // "1"
+    });
+
     return (
       <Table.Row key={item.id}>
         <Table.Cell textAlign="center">{item.memberNo}</Table.Cell>
@@ -444,6 +458,7 @@ const getBadgeColorByDateDifference = (endDate) => {
             {displayText}
           </Badge>
         </Table.Cell>
+        <Table.Cell textAlign="end">{formattedLastAttendanceDate}</Table.Cell>
         <Table.Cell textAlign="end">{formattedDate}</Table.Cell>
       </Table.Row>
     );

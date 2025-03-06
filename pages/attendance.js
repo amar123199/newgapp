@@ -72,16 +72,28 @@ export default function Attendance() {
   const fetchData = async () => {
     const querySnapshot = await getDocs(collection(db, "members")); // Firestore collection name
     const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    // Filter data to only include entries created on the selected date (currentDate)
-    const filteredData = data.filter(item => isCreatedOnDate(item.createdAt, currentDate));
+
+    // Get today's date in YYYY-MM-DD format
+  const updatedCurrentDate = currentDate.toISOString().split('T')[0];
+
+  // Check attendance for each member for today
+  const membersWithAttendance = await Promise.all(data.map(async (member) => {
+    const attendanceRef = doc(db, "attendances", `${member.id}_${updatedCurrentDate}`);
+    const attendanceDoc = await getDoc(attendanceRef);
+
+    if (attendanceDoc.exists()) {
+      return { ...member, status: attendanceDoc.data().status };
+    } else {
+      return { ...member, status: 'absent' };  // Default to absent if no record exists
+    }
+  }));
+
 
     // Sort the filtered data by patientNo in ascending order
-    const sortedData = filteredData.sort((a, b) => b.patientNo - a.patientNo);
+    const sortedData = membersWithAttendance.sort((a, b) => b.memberNo - a.memberNo);
 
     setItems(sortedData);
 
-    // Set the patient number to be the next available number (i.e., current patient count + 1)
-    setPatientNo(filteredData.length + 1);
   };
 
   // Helper function to compare if the document's createdAt date matches the currentDate
@@ -176,57 +188,7 @@ export default function Attendance() {
     fetchData();
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    // Capitalize the first letter of the name
-    const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1);
-
-    console.log({ capitalizedName, illness, medicine });
-
-    if (!capitalizedName || !illness || !medicine) {
-      alert("Please fill all fields before saving.");
-      return;
-    }
-
-    try {
-      const docRef = await addDoc(collection(db, "patients"), {
-        name: capitalizedName,
-        illness,
-        medicine,
-        createdAt: new Date(), // Timestamp
-        patientNo: patientNo,  // Assign the patient number
-      });
-
-      console.log("Document written with ID: ", docRef.id);
-
-      // Update local state to reflect new patient, converting the createdAt to a valid Date object
-      const newPatient = {
-        id: docRef.id,
-        name: capitalizedName,
-        illness,
-        medicine,
-        patientNo,
-        createdAt: new Date() // Ensure it's converted to a JavaScript Date object
-      };
-
-      // Update local state to reflect new patient
-      setItems(prevItems => [...prevItems, newPatient]); // Update state with new patient
-      setPatientNo(patientNo + 1);
-
-      // After adding, trigger a fresh data fetch to update the UI
-      fetchData();
-
-      // Reset input fields
-      setName("");
-      setIllness("");
-      setMedicine("");
-      setOpen(false); // Close the drawer
-    } catch (error) {
-      console.error("Error adding document: ", error);
-    }
-    // You can add your save functionality here, like sending data to an API or saving locally
-  };
-
+  
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchName(value); // Update the search term
@@ -290,61 +252,10 @@ export default function Attendance() {
     fetchData(); // Fetch data based on today's date
   };
 
-  useEffect(() => {
-    // Initialize SpeechRecognition on component mount
-    if (window.SpeechRecognition || window.webkitSpeechRecognition) {
-      recognition.current = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-      recognition.current.lang = 'en-US'; // Set the language
-      recognition.current.interimResults = true; // Get real-time results
-      recognition.current.maxAlternatives = 1; // Get only the best result
-
-      recognition.current.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        console.log('Transcript:', transcript); // Log the transcript to the console
-        setSpeechTranscript(transcript); // Update the speech transcript in the state
-        setName(transcript); // Set the transcript as the name input value
-      };
-
-      recognition.current.onend = () => {
-        setIsListening(false); // Set listening state to false when recognition ends
-        console.log('Speech recognition stopped');
-      };
-
-      recognition.current.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-      };
-    } else {
-      console.log('SpeechRecognition is not supported in this browser.');
-    }
-
-    // Cleanup on component unmount
-    return () => {
-      if (recognition.current) {
-        recognition.current.onresult = null;
-        recognition.current.onend = null;
-        recognition.current.onerror = null;
-      }
-    };
-  }, []);
-
-  const handleStartListening = () => {
-    if (recognition.current) {
-      recognition.current.start();
-      setIsListening(true); // Set listening state to true
-      console.log('Speech recognition started');
-    }
-  };
-
-  const handleStopListening = () => {
-    if (recognition.current) {
-      recognition.current.stop(); // Stop the recognition
-      setIsListening(false); // Set listening state to false
-      console.log('Speech recognition stopped');
-    }
-  };
+ 
 
   const handleAttendanceClick = async (memberId) => {
-    const currentTimestamp = new Date();
+    const currentTimestamp = currentDate;
     const dateString = currentTimestamp.toISOString().split('T')[0]; // Format as YYYY-MM-DD
   
     try {
@@ -465,76 +376,6 @@ export default function Attendance() {
 
       <BottomNavigationBar onSearchClick={handleFabClick} />
 
-      {/* Drawer component */}
-      <Drawer
-        anchor='top'
-        open={open}
-        onClose={toggleDrawer}
-
-      >
-
-        <form onSubmit={handleSubmit}>
-          <Stack gap={5} p={6} >  {/* Added padding to the Stack */}
-            <box>
-              <Text fontSize="sm">Patient No</Text> {/* Small font size for label */}
-              <Text fontSize="3xl" fontWeight="bold">{patientNo}</Text> {/* Large number below Patient No */}
-            </box>
-
-
-            <Field label="Name" required>
-              <Input
-                ref={nameInputRef}
-                variant="subtle"
-                size="lg"
-                placeholder="Enter Name"
-                value={name}  // Bind the value of the input to the state
-                onChange={(e) => setName(e.target.value)}  // Update state on change
-              />
-            </Field>
-            <Button
-            onMouseDown={handleStartListening}
-              onMouseUp={handleStopListening}
-              onTouchStart={handleStartListening}  // Handle touch devices
-              onTouchEnd={handleStopListening}    // Handle touch devices
-              disabled={isListening} >M</Button>
-           
-            <Field label="Illness" required>
-              <Input
-                variant="subtle"
-                size="lg"
-                placeholder="Enter Illness"
-                value={illness}  // Bind the value of the input to the state
-                onChange={(e) => setIllness(e.target.value)}  // Update state on change
-              />
-            </Field>
-
-            <Field label="Medicine / Remarks" required>
-              <Textarea
-                variant="subtle"
-                size="lg"
-                placeholder="Enter Medicine"
-                value={medicine}  // Bind the value of the input to the state
-                onChange={(e) => setMedicine(e.target.value)}  // Update state on change
-              />
-            </Field>
-            <Separator />
-
-            <Stack direction="row" justify="space-between" align="center">
-              <ButtonGroup width="100%">
-                <Button size="lg" variant="subtle" flex="1" onClick={toggleDrawer} >Close</Button>
-                <Button size="lg" colorPalette="teal" flex="1" type="submit">
-                  Save
-                </Button>
-              </ButtonGroup>
-
-            </Stack>
-
-          </Stack>
-        </form>
-      </Drawer>
-
-
-
       {/* Fixed Search Bar */}
       {search && (
         <div style={{ position: 'fixed', top: 0, width: '100%', padding: '30px 16px', backgroundColor: 'white', zIndex: 2000 }}>
@@ -557,43 +398,7 @@ export default function Attendance() {
 
         </div>
       )}
-      {/* <div style={{position:"absolute"}}>
-        <DrawerRoot open={open} placement="bottom">
-          <DrawerBackdrop />
-          <DrawerContent roundedTop="lg" bottom="0" zIndex="2000" >
-            <DrawerHeader>
-              <DrawerTitle>Drawer Title</DrawerTitle>
-            </DrawerHeader>
-            <DrawerBody>
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-            </DrawerBody>
-            <DrawerFooter>
-              <DrawerCloseTrigger asChild>
-                <Button variant="outline">Cancel</Button>
-              </DrawerCloseTrigger>
-              <Button>Save</Button>
-            </DrawerFooter>
-          </DrawerContent>
-        </DrawerRoot>
-        </div> */}
 
-      {/* <Stat.Root>
-          <Stat.Label>today</Stat.Label>
-          <Stat.ValueText>{formattedDate}</Stat.ValueText>
-        </Stat.Root>
-
-        <Stat.Root>
-          <Stat.Label>Yesterday</Stat.Label>
-          <Stat.ValueText>Yesterdat</Stat.ValueText>
-        </Stat.Root> */}
-
-
-
-
-
-
-
-      {/* <FloatingActionButton onClick={handleSearchClick} /> */}
 
     </>
   );
