@@ -10,7 +10,7 @@ import {
   DrawerHeader,
   DrawerRoot,
   DrawerTitle,
-  DrawerTrigger, Button,Heading, Modal, ModalOverlay,Icon, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, StackSeparator
+  DrawerTrigger, Button, Heading, Modal, ModalOverlay, Icon, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, StackSeparator
 } from '@chakra-ui/react';
 import { Field } from '../components/ui/field';
 import { motion, AnimatePresence } from 'framer-motion'; // Importing framer-motion for animations
@@ -22,6 +22,7 @@ import StatCard from '../components/StatCard'; // Import the StatCard component
 import { Drawer, SwipeableDrawer, Typography } from '@mui/material';
 
 import PeopleIcon from '@mui/icons-material/People'; // For Members
+import MoneyIcon from '@mui/icons-material/Money'; // For Members
 
 
 
@@ -31,12 +32,10 @@ import { Swiper, SwiperSlide } from 'swiper/react';
 // Import Swiper styles
 import 'swiper/css';
 
-import { collection, getDocs, addDoc, query, where, orderBy,Timestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, query, where, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '../firebaseConfig'; // Import Firestore config
 
-
-
-
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 
 export default function Home() {
@@ -58,7 +57,9 @@ export default function Home() {
 
   const [items, setItems] = useState([]);
   const [todaysPresentCount, setTodaysPresentCount] = useState(0);
+  const [totalEarnings, setTotalEarnings] = useState(0);
 
+  const [attendanceData, setAttendanceData] = useState([]);
 
   const [speechTranscript, setSpeechTranscript] = useState(''); // To store the transcript
   const [isListening, setIsListening] = useState(false); // To track the listening state
@@ -72,10 +73,12 @@ export default function Home() {
       // Optionally, you can update some state to display the count in your UI
       setTodaysPresentCount(presentCount); // Assuming you have a state variable for this
     };
-  
+
     fetchPresentCount();
+    fetchMonthlyEarnings();
+    fetchLastSevenDaysAttendance();
   }, []); // Fetch the count whenever the current date changes
-  
+
 
   const getTodaysPresentCount = async () => {
     try {
@@ -83,12 +86,12 @@ export default function Home() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);  // Set the time to midnight (00:00:00)
       const startOfToday = Timestamp.fromDate(today); // Get Firestore Timestamp for midnight
-  
+
       // Get tomorrow's date, and set the time to midnight
       const tomorrow = new Date(today);
       tomorrow.setDate(today.getDate() + 1);
       const startOfTomorrow = Timestamp.fromDate(tomorrow); // Firestore Timestamp for the start of tomorrow
-  
+
       // Query the 'attendances' collection for records from today (from midnight to just before tomorrow)
       const q = query(
         collection(db, "attendances"),
@@ -96,12 +99,12 @@ export default function Home() {
         where("date", "<", startOfTomorrow), // Start of tomorrow (exclusive)
         where("status", "==", "present") // Only "present" status
       );
-  
+
       const querySnapshot = await getDocs(q);
-  
+
       // Get the count of documents that match today's present attendance
       const presentCount = querySnapshot.size;
-  
+
       console.log("Today's Present Count: ", presentCount); // Log the result
       return presentCount;
     } catch (error) {
@@ -109,6 +112,86 @@ export default function Home() {
       return 0; // Return 0 if an error occurs
     }
   };
+
+  const fetchMonthlyEarnings = async () => {
+    try {
+      const now = new Date();
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+      const startTimestamp = Timestamp.fromDate(firstDay);
+      const endTimestamp = Timestamp.fromDate(lastDay);
+
+      const membershipsQuery = query(
+        collection(db, "memberships"),
+        where("startDate", ">=", startTimestamp),
+        where("startDate", "<=", endTimestamp)
+      );
+
+      const querySnapshot = await getDocs(membershipsQuery);
+
+      let total = 0;
+      querySnapshot.forEach((doc) => {
+        total += doc.data().fees || 0; // Ensure fees field exists
+      });
+
+      setTotalEarnings(total);
+    } catch (error) {
+      console.error("Error fetching monthly earnings: ", error);
+    }
+  };
+
+  const fetchLastSevenDaysAttendance = async () => {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // Ensure we include all records for today
+
+    const pastSevenDays = [];
+    for (let i = 6; i >= 0; i--) {
+      const day = new Date(today);
+      day.setDate(today.getDate() - i);
+      pastSevenDays.push({
+        date: day,
+        count: 0, // Default to 0 before fetching data
+      });
+    }
+
+    const startDate = new Date(today);
+    startDate.setDate(today.getDate() - 6); // Go 6 days back to cover 7 days total
+    startDate.setHours(0, 0, 0, 0); // Start from midnight
+
+    const startTimestamp = Timestamp.fromDate(startDate);
+    const endTimestamp = Timestamp.fromDate(today);
+
+    const q = query(
+      collection(db, 'attendances'),
+      where('date', '>=', startTimestamp),
+      where('date', '<=', endTimestamp),
+      where('status', '==', 'present')
+    );
+
+    const querySnapshot = await getDocs(q);
+    const attendanceMap = {};
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      const attendanceDate = new Date(data.date.seconds * 1000);
+      const key = attendanceDate.toISOString().split('T')[0]; // Format YYYY-MM-DD
+
+      if (attendanceMap[key]) {
+        attendanceMap[key] += 1;
+      } else {
+        attendanceMap[key] = 1;
+      }
+    });
+    console.log(attendanceMap)
+    // Update counts in pastSevenDays
+    const updatedData = pastSevenDays.map((day) => ({
+      name: day.date.toLocaleDateString('en-US', { weekday: 'short' }), // Format as 'Mon', 'Tue', etc.
+      count: attendanceMap[day.date.toISOString().split('T')[0]] || 0,
+    }));
+
+    setAttendanceData(updatedData);
+    console.log(updatedData)
+  }
 
   // Helper function to compare if the document's createdAt date matches the currentDate
   const isCreatedOnDate = (createdAt, targetDate) => {
@@ -310,31 +393,49 @@ export default function Home() {
     //setSearchResults(results); // Update search results state
   };
 
- 
 
-  
+
+
 
 
   return (
     <>
       <div>
-       <Heading>Rana Gym</Heading>
+        <Heading>Rana Gym</Heading>
       </div>
 
-      <Stat.Root maxW="240px" borderWidth="1px" p="4" rounded="md">
-      <HStack justify="space-between">
-        <Stat.Label>Today Attendance</Stat.Label>
-        <Icon color="fg.muted">
-          <PeopleIcon />
-        </Icon>
-      </HStack>
-      <Stat.ValueText>{todaysPresentCount}</Stat.ValueText>
-    </Stat.Root>
+      <Stat.Root maxW="100%" borderWidth="1px" p="4" rounded="md">
+        <HStack justify="space-between">
+          <Stat.Label>Today Attendance</Stat.Label>
+          <Icon color="fg.muted">
+            <PeopleIcon />
+          </Icon>
+        </HStack>
+        <Stat.ValueText>{todaysPresentCount}</Stat.ValueText>
+      </Stat.Root>
 
+      <Stat.Root maxW="100%" borderWidth="1px" p="4" rounded="md">
+        <HStack justify="space-between">
+          <Stat.Label>Monthly Earning</Stat.Label>
+          <Icon color="fg.muted">
+            <MoneyIcon />
+          </Icon>
+        </HStack>
+        <Stat.ValueText> ₹{totalEarnings}</Stat.ValueText>
+      </Stat.Root>
+     <Heading>Last 7 Days Attendance</Heading>
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={attendanceData}>
+          <XAxis dataKey="name" />
+          <YAxis />
+          <Tooltip />
+          <Bar dataKey="count" fill="#4CAF50" />
+        </BarChart>
+      </ResponsiveContainer>
 
       <BottomNavigationBar onSearchClick={handleFabClick} />
 
-    
+
 
 
       {/* Fixed Search Bar */}
@@ -359,7 +460,7 @@ export default function Home() {
 
         </div>
       )}
-   
+
 
     </>
   );

@@ -75,8 +75,6 @@ export default function Members() {
       const attendanceSnapshot = await getDocs(collection(db, "members", member.id, "attendance"));
       const attendanceData = attendanceSnapshot.docs.map(doc => doc.data());
       const lastAttendanceDate = attendanceData.length > 0 ? attendanceData[0].date.toDate() : null; // Assuming there is at least one membership
-
-       console.log(lastAttendanceDate)
       
       return { ...member, endDate,lastAttendanceDate }; // Add endDate to the member object
     }));
