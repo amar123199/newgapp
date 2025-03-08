@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from "next/router";
 import { useSwipeable } from 'react-swipeable';  // Importing the swipeable hook
 import {
   Table, Stat, Box, Input, FormControl, Stack, DrawerActionTrigger, Text, Separator, ButtonGroup, Textarea,
@@ -28,6 +29,8 @@ import { db } from '../firebaseConfig'; // Import Firestore config
 
 
 export default function Members() {
+  const router = useRouter();
+
   const [currentDate, setCurrentDate] = useState(new Date());
   const [open, setOpen] = useState(false)
 
@@ -38,6 +41,7 @@ export default function Members() {
   const nameInputRef = useRef(null); // Create a reference for the input
   // Inside your component
   const searchTimeoutRef = useRef(null);
+
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -74,9 +78,18 @@ export default function Members() {
 
       const attendanceSnapshot = await getDocs(collection(db, "members", member.id, "attendance"));
       const attendanceData = attendanceSnapshot.docs.map(doc => doc.data());
-      const lastAttendanceDate = attendanceData.length > 0 ? attendanceData[0].date.toDate() : null; // Assuming there is at least one membership
+      // Sort attendanceData by date in descending order (latest first)
+      attendanceData.sort((a, b) => b.date.toDate() - a.date.toDate());
+
+      const lastAttendanceDate = attendanceData.length > 0 ? attendanceData[0].date.toDate() : null;
+
+      // Calculate difference in days
+const today = new Date();
+const lastAttendanceDaysAgo = lastAttendanceDate 
+  ? Math.floor((today - lastAttendanceDate) / (1000 * 3600 * 24)) 
+  : null; // Null if no attendance records
       
-      return { ...member, endDate,lastAttendanceDate }; // Add endDate to the member object
+      return { ...member, endDate,lastAttendanceDate, lastAttendanceDaysAgo }; // Add endDate to the member object
     }));
 
     // Remove filtering by currentDate - fetch all data
@@ -445,18 +458,34 @@ const getBadgeColorByDateDifference = (endDate) => {
       month: "short", // "Apr"
       day: "numeric", // "1"
     });
+    const getBadgeColorForAttendance = (daysAgo) => {
+      if (daysAgo <= 3) return "gray";
+      if (daysAgo > 3 && daysAgo <= 10) return "yellow";
+      return "red";
+    };
+
+    const getAttendanceText = (daysAgo) => {
+      if (daysAgo === 0) return "Today";
+      if (daysAgo === 1) return "Yesterday";
+      return `- ${daysAgo} Days`;
+    };
+    
 
     return (
       <Table.Row key={item.id}>
         <Table.Cell textAlign="center">{item.memberNo}</Table.Cell>
-        <Table.Cell>{item.name}</Table.Cell>
+        <Table.Cell onClick={() => router.push(`/memberdetails/${item.id}`)} >{item.name}</Table.Cell>
         <Table.Cell>{item.phone}</Table.Cell>
         <Table.Cell>
           <Badge size="md" colorPalette={badgeColor} variant={variant}>
             {displayText}
           </Badge>
         </Table.Cell>
-        <Table.Cell textAlign="end">{formattedLastAttendanceDate}</Table.Cell>
+        <Table.Cell textAlign="center">
+          <Badge size="md" colorPalette={getBadgeColorForAttendance(item.lastAttendanceDaysAgo)}>
+          {getAttendanceText(item.lastAttendanceDaysAgo)}
+          </Badge>
+        </Table.Cell>
         <Table.Cell textAlign="end">{formattedDate}</Table.Cell>
       </Table.Row>
     );
