@@ -1,16 +1,18 @@
 import { useRouter } from "next/router";
-import { useEffect, useState } from "react";
+import { useEffect, useState,useRef } from "react";
 import { db } from "../../firebaseConfig";
 import { doc, collection, getDocs, getDoc } from "firebase/firestore";
 import Calendar from "react-calendar";
 import "react-calendar/dist/Calendar.css";
 import { height } from "@mui/system";
+import html2canvas from 'html2canvas';
 
 const MemberDetail = () => {
   const router = useRouter();
   const { id } = router.query; // Get ID from URL
   const [member, setMember] = useState(null);
   const [datesPresent, setDatesPresent] = useState([]);
+  const cardRef = useRef(null);  // Reference for the card div
 
   useEffect(() => {
     if (!id) return; // Prevent fetching if ID is undefined
@@ -33,9 +35,10 @@ const MemberDetail = () => {
       const presentDates = attendanceSnapshot.docs
         .filter((doc) => doc.data().status === "present")
         .map((doc) => {
-          // Convert the timestamp to YYYY-MM-DD format
-          const date = doc.data().date.toDate(); // Firestore timestamp to JS Date
-          return date.toISOString().split("T")[0]; // "YYYY-MM-DD"
+          // Convert the timestamp to Date, then adjust by subtracting one day
+      const date = doc.data().date.toDate(); // Firestore timestamp to JS Date
+      date.setDate(date.getDate() - 1); // Subtract one day to adjust
+      return date.toISOString().split("T")[0]; // "YYYY-MM-DD"
         });
 
       setDatesPresent(presentDates);
@@ -60,6 +63,19 @@ const MemberDetail = () => {
     const dateStr = date.toISOString().split("T")[0]; // Format date to "YYYY-MM-DD"
     if (datesPresent.includes(dateStr)) {
       return "highlight"; // Add the highlight class for present dates
+    }
+  };
+
+  // Function to download the card as PNG
+  const downloadImage = () => {
+    if (cardRef.current) {
+      html2canvas(cardRef.current, { scale: 2 }).then((canvas) => {
+        // Convert the canvas to PNG and download it
+        const link = document.createElement('a');
+        link.href = canvas.toDataURL('image/png');
+        link.download = 'card-image.png';
+        link.click();
+      });
     }
   };
 
@@ -99,6 +115,43 @@ const MemberDetail = () => {
         }
       }}
     />
+
+<div
+        ref={cardRef}
+        style={{
+          backgroundColor:"orange",
+          width: '300px',
+          height: '200px',
+          padding: '20px',
+          borderRadius: '8px',
+          position: 'relative',
+          overflow: 'hidden',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          textAlign: 'center',
+        }}
+      >
+        <img
+          src="/icons/icon-512x512.png" // Add logo URL from Firestore
+          alt="Logo"
+          style={{
+            position: 'absolute',
+            top: '20px',
+            left: '20px',
+            width: '50px',
+            height: '50px',
+          }}
+        />
+        <div style={{ zIndex: 10 }}>
+          <h2>{member.name}</h2>
+          <p>{member.phone}</p>
+        </div>
+      </div>
+
+      <button onClick={downloadImage} style={{ marginTop: '20px' }}>
+        Download Card as PNG
+      </button>
     </div>
   );
 };

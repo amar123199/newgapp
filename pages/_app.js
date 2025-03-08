@@ -16,10 +16,15 @@ export default function App({ Component, pageProps }) {
     try {
       const permission = await Notification.requestPermission();
       if (permission === 'granted') {
-        const token = await getToken(messaging, { vapidKey: 'BPqBEn4y5T_7aSuMcMH7glEmP_8NuNOkqVCq8E3P7HibV-Iim45tZDYRi_a8RbnHevS_xiUvZzZMdJPfl0hQV6I' }); // Add your VAPID key
-        console.log('Notification permission granted. Token:', token);
-        setNToken(token);
-        // Send this token to your server to subscribe the user to notifications
+        if (messaging) {
+          const token = await getToken(messaging, {
+            vapidKey: 'BPqBEn4y5T_7aSuMcMH7glEmP_8NuNOkqVCq8E3P7HibV-Iim45tZDYRi_a8RbnHevS_xiUvZzZMdJPfl0hQV6I',
+          });
+          console.log('Notification permission granted. Token:', token);
+          setNToken(token);
+        } else {
+          console.error('Firebase messaging is not initialized');
+        }
       } else {
         console.error('Notification permission denied');
       }
